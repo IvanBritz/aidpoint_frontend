@@ -1,0 +1,285 @@
+/* Director Dashboard Enhanced Styles */
+
+/* Smooth transitions for interactive elements */
+.director-card {
+  @apply transform transition-all duration-200 ease-in-out;
+}
+
+.director-card:hover {
+  @apply scale-105 shadow-lg;
+}
+
+/* Enhanced notification animations */
+.notification-pulse {
+  animation: notification-pulse 2s infinite;
+}
+
+@keyframes notification-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+/* Responsive metric cards */
+.metric-card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow;
+  min-height: 120px;
+}
+
+@media (max-width: 640px) {
+  .metric-card {
+    min-height: 100px;
+  }
+}
+
+/* Gradient backgrounds */
+.director-gradient {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
+.success-gradient {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.warning-gradient {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.danger-gradient {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+/* Enhanced sidebar styles */
+.director-sidebar {
+  @apply bg-white shadow-lg border-r border-gray-200;
+  backdrop-filter: blur(10px);
+}
+
+.director-nav-item {
+  @apply flex items-center px-3 py-2 text-sm font-medium rounded-md mb-1 transition-all duration-200;
+}
+
+.director-nav-item.active {
+  @apply bg-blue-50 text-blue-700 border-r-2 border-blue-700;
+}
+
+.director-nav-item:not(.active) {
+  @apply text-gray-600 hover:bg-gray-50 hover:text-gray-900;
+}
+
+.director-nav-item:hover {
+  @apply transform translate-x-1;
+}
+
+/* Mobile-first responsive design */
+@media (max-width: 1024px) {
+  .director-main-content {
+    @apply px-4;
+  }
+  
+  .director-sidebar {
+    @apply fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300;
+  }
+  
+  .director-sidebar.closed {
+    @apply -translate-x-full;
+  }
+}
+
+/* Enhanced loading states */
+.loading-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, transparent 37%, #f0f0f0 63%);
+  background-size: 400% 100%;
+  animation: loading-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: -100% 50%;
+  }
+}
+
+/* Enhanced form inputs */
+.director-input {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm;
+  @apply focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200;
+}
+
+.director-input:focus {
+  @apply transform scale-105;
+}
+
+/* Button enhancements */
+.director-btn {
+  @apply px-4 py-2 font-medium rounded-lg transition-all duration-200;
+  @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.director-btn-primary {
+  @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+}
+
+.director-btn-secondary {
+  @apply bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-500;
+}
+
+.director-btn-success {
+  @apply bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;
+}
+
+.director-btn-danger {
+  @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+}
+
+.director-btn:hover {
+  @apply transform -translate-y-0.5 shadow-lg;
+}
+
+.director-btn:active {
+  @apply transform translate-y-0;
+}
+
+/* Status indicators */
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-dot.active {
+  @apply bg-green-400;
+  animation: status-pulse 2s infinite;
+}
+
+.status-dot.inactive {
+  @apply bg-gray-400;
+}
+
+.status-dot.pending {
+  @apply bg-yellow-400;
+}
+
+.status-dot.error {
+  @apply bg-red-400;
+}
+
+@keyframes status-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Enhanced tables */
+.director-table {
+  @apply min-w-full divide-y divide-gray-200;
+}
+
+.director-table th {
+  @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50;
+}
+
+.director-table td {
+  @apply px-6 py-4 whitespace-nowrap text-sm;
+}
+
+.director-table tr:hover {
+  @apply bg-gray-50 transform scale-105 transition-all duration-150;
+}
+
+/* Enhanced modals */
+.director-modal {
+  @apply fixed inset-0 z-50 overflow-y-auto;
+}
+
+.director-modal-backdrop {
+  @apply fixed inset-0 bg-gray-600 bg-opacity-50 transition-opacity;
+}
+
+.director-modal-content {
+  @apply bg-white rounded-lg shadow-xl transform transition-all;
+  animation: modal-slide-in 0.3s ease-out;
+}
+
+@keyframes modal-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Print styles */
+@media print {
+  .director-sidebar,
+  .notification-bell,
+  .director-actions {
+    @apply hidden;
+  }
+  
+  .director-main-content {
+    @apply ml-0;
+  }
+  
+  .director-card {
+    @apply shadow-none border border-gray-300;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .director-card {
+    @apply bg-gray-800 border-gray-700 text-white;
+  }
+  
+  .director-sidebar {
+    @apply bg-gray-900 border-gray-700;
+  }
+  
+  .director-nav-item:not(.active) {
+    @apply text-gray-300 hover:bg-gray-800 hover:text-white;
+  }
+}
+
+/* Accessibility enhancements */
+.director-focus:focus {
+  @apply ring-2 ring-blue-500 ring-offset-2 outline-none;
+}
+
+/* Screen reader only content */
+.sr-only {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .director-card {
+    @apply border-2 border-black;
+  }
+  
+  .director-btn {
+    @apply border-2 border-black;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
