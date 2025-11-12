@@ -162,7 +162,7 @@ const LoginVerification = () => {
                         <ShieldCheckIcon className="w-10 h-10 text-white" />
                     </div>
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">Verify Your Identity</h1>
-                    <p className="text-gray-600">We've sent a 6-digit verification code to your email address</p>
+                    <p className="text-gray-600">We've sent a 5-digit verification code to your email address</p>
                 </div>
 
                 {/* Main Card */}
@@ -197,19 +197,19 @@ const LoginVerification = () => {
                     <form onSubmit={submitForm}>
                         {/* Verification Code Input */}
                         <div className="mb-6">
-                            <label className="block text-sm font-medium text-gray-700 mb-3">Verification Code</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-3">5-digit Verification Code</label>
                             <div className="relative">
                                 <input
                                     type="text"
                                     value={code}
-                                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
                                     className={`w-full text-center text-3xl font-bold tracking-[0.5em] py-4 px-6 border-2 rounded-xl outline-none transition-all duration-300 ${
-                                        code.length === 6 
+                                        code.length === 5 
                                             ? 'border-green-500 bg-green-50 focus:ring-4 focus:ring-green-100' 
                                             : 'border-gray-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100'
                                     }`}
-                                    placeholder="000000"
-                                    maxLength="6"
+                                    placeholder="00000"
+                                    maxLength="5"
                                     autoFocus
                                     required
                                 />
@@ -217,14 +217,14 @@ const LoginVerification = () => {
                                 <div className="mt-3 bg-gray-200 rounded-full h-1 overflow-hidden">
                                     <div 
                                         className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-300 ease-out"
-                                        style={{ width: `${(code.length / 6) * 100}%` }}
+                                        style={{ width: `${(code.length / 5) * 100}%` }}
                                     ></div>
                                 </div>
                             </div>
                             <p className="text-xs text-gray-500 mt-3 text-center">
-                                {code.length === 0 && "Enter the 6-digit code from your email"}
-                                {code.length > 0 && code.length < 6 && `${code.length}/6 digits entered`}
-                                {code.length === 6 && (
+                                {code.length === 0 && "Enter the 5-digit code from your email"}
+                                {code.length > 0 && code.length < 5 && `${code.length}/5 digits entered`}
+                                {code.length === 5 && (
                                     <span className="text-green-600 font-medium flex items-center justify-center">
                                         <CheckCircleIcon className="w-4 h-4 mr-1" />
                                         Code complete! Ready to verify.
@@ -237,9 +237,9 @@ const LoginVerification = () => {
                         <div className="space-y-4">
                             <button
                                 type="submit"
-                                disabled={isLoading || code.length !== 6}
+                                disabled={isLoading || code.length !== 5}
                                 className={`w-full py-4 px-6 rounded-xl font-semibold focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center space-x-2 transform hover:scale-[1.02] ${
-                                    code.length === 6 && !isLoading
+                                    code.length === 5 && !isLoading
                                         ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 shadow-lg hover:shadow-xl animate-pulse-glow'
                                         : 'bg-gray-200 text-gray-400'
                                 }`}

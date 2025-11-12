@@ -19,6 +19,8 @@ const { user, mutate } = useAuth({ middleware: 'auth' })
     const [errors, setErrors] = useState({})
     const [status, setStatus] = useState('')
     const [loading, setLoading] = useState(false)
+    const [verificationCode, setVerificationCode] = useState('')
+    const [sendingCode, setSendingCode] = useState(false)
 
     const onSubmit = async e => {
         e.preventDefault()
@@ -28,10 +30,15 @@ const { user, mutate } = useAuth({ middleware: 'auth' })
         try {
             // Ensure CSRF cookie is present for Sanctum
             try { await axios.get('/sanctum/csrf-cookie') } catch (_) {}
-            await axios.put('/api/user/password', {
+            const payload = {
                 password,
                 password_confirmation: passwordConfirmation,
-            })
+            }
+            // Only include verification_code when not first-time change
+            if (!user?.must_change_password) {
+                payload.verification_code = verificationCode
+            }
+            await axios.put('/api/user/password', payload)
             setStatus('Password updated successfully.')
             // Revalidate the user so must_change_password is cleared before redirect
             try { await mutate() } catch (_) {}
@@ -46,6 +53,8 @@ const { user, mutate } = useAuth({ middleware: 'auth' })
         } catch (error) {
             if (error.response?.status === 422) {
                 setErrors(error.response.data.errors || {})
+            } else if (error.response?.status === 202 && error.response?.data?.requires_verification) {
+                setStatus('A 5-digit verification code was sent to your email. Enter it below to continue.')
             } else {
                 setErrors({ general: ['Failed to update password.'] })
             }
@@ -80,6 +89,47 @@ const { user, mutate } = useAuth({ middleware: 'auth' })
                             )}
 
                             <form onSubmit={onSubmit} className="space-y-6">
+                                {!user?.must_change_password && (
+                                  <div>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="verification_code">Verification Code</Label>
+                                        <button
+                                            type="button"
+                                            className="text-sm text-blue-600 underline disabled:opacity-50"
+                                            onClick={async () => {
+                                                setSendingCode(true)
+                                                setErrors({})
+                                                setStatus('')
+                                                try {
+                                                    try { await axios.get('/sanctum/csrf-cookie') } catch (_) {}
+                                                    const res = await axios.post('/email/resend-code')
+                                                    setStatus(res.data.message || 'Verification code sent.')
+                                                } catch (e) {
+                                                    setErrors({ general: ['Failed to send verification code.'] })
+                                                } finally {
+                                                    setSendingCode(false)
+                                                }
+                                            }}
+                                            disabled={sendingCode}
+                                        >
+                                            {sendingCode ? 'Sending...' : 'Send Code'}
+                                        </button>
+                                    </div>
+                                    <Input
+                                        id="verification_code"
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]{5}"
+                                        value={verificationCode}
+                                        onChange={e => setVerificationCode(e.target.value)}
+                                        className="mt-1 block w-full"
+                                        placeholder="Enter 5-digit code"
+                                        required={!user?.must_change_password}
+                                    />
+                                    <InputError messages={errors.verification_code} className="mt-2" />
+                                  </div>
+                                )}
+
                                 <div>
                                     <Label htmlFor="password">New Password</Label>
                                     <Input
