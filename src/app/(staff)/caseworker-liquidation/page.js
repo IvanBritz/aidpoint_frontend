@@ -337,7 +337,8 @@ const CaseworkerLiquidationPage = () => {
   // Simple role detection - allow access for testing 
   const isCaseworker = user && (
     user?.systemRole?.name?.toLowerCase?.() === 'caseworker' || 
-    String(user?.systemRole?.name || '').toLowerCase() === 'caseworker' ||
+    user?.system_role?.name?.toLowerCase?.() === 'caseworker' ||
+    String(user?.systemRole?.name || user?.system_role?.name || '').toLowerCase() === 'caseworker' ||
     // Temporary: Allow all authenticated users on localhost for testing
     (user && typeof window !== 'undefined' && window.location.hostname === 'localhost')
   )
@@ -350,7 +351,7 @@ const CaseworkerLiquidationPage = () => {
           <div className="text-red-600 text-lg font-semibold mb-2">🚫 Access Denied</div>
           <div className="text-gray-700">You must be a caseworker to access this page.</div>
           <div className="text-sm text-gray-500 mt-2">
-            Current role: {user?.systemRole?.name || user?.role || 'Unknown'}
+            Current role: {user?.systemRole?.name || user?.system_role?.name || user?.role || 'Unknown'}
           </div>
         </div>
       </div>
