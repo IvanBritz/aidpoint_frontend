@@ -210,9 +210,28 @@ const NotificationBell = ({ userId, userRole }) => {
     }
 
     const formatTimestamp = (timestamp) => {
-        const date = new Date(timestamp)
+        if (!timestamp) return ''
+        
+        // Parse the timestamp - handle both ISO and database formats
+        let date = new Date(timestamp)
+        
+        // If the date is invalid, try parsing it differently
+        if (isNaN(date.getTime())) {
+            // Try adding 'Z' to make it UTC if it's missing
+            date = new Date(timestamp + 'Z')
+        }
+        
+        // If still invalid, return empty
+        if (isNaN(date.getTime())) {
+            return ''
+        }
+        
         const now = new Date()
-        const diffInMinutes = Math.floor((now - date) / (1000 * 60))
+        const diffInMs = now - date
+        const diffInMinutes = Math.floor(diffInMs / (1000 * 60))
+        
+        // Handle negative differences (future timestamps due to timezone issues)
+        if (diffInMinutes < 0) return 'Just now'
         
         if (diffInMinutes < 1) return 'Just now'
         if (diffInMinutes < 60) return `${diffInMinutes}m ago`
