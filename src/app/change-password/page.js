@@ -41,8 +41,8 @@ const { user, mutate } = useAuth({ middleware: 'auth' })
             await axios.put('/api/user/password', payload)
             setStatus('Password updated successfully.')
             // Revalidate the user so must_change_password is cleared before redirect
-            try { await mutate() } catch (_) {}
-            const roleName = user?.system_role?.name?.toLowerCase?.()
+            const updatedUser = await mutate()
+            const roleName = updatedUser?.system_role?.name?.toLowerCase?.()
             if (roleName === 'director') {
                 router.push('/facility-registration')
             } else if (roleName === 'caseworker' || roleName === 'finance') {

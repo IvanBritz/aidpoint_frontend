@@ -13,6 +13,13 @@ const Dashboard = () => {
     const { user } = useAuth({ middleware: 'auth' })
     const [enrollmentStatus, setEnrollmentStatus] = useState('pending')
     const [aidRequestStatus, setAidRequestStatus] = useState(null)
+    
+    // Redirect to password change if required (prevents infinite loading)
+    useEffect(() => {
+        if (user?.must_change_password) {
+            window.location.href = '/change-password'
+        }
+    }, [user])
 
     // Load statuses from backend so Application Progress is accurate
     useEffect(() => {
