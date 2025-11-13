@@ -8,7 +8,7 @@ import { CheckCircleIcon, ShieldCheckIcon, ArrowLeftIcon, PaperAirplaneIcon } fr
 
 const LoginVerification = () => {
     const router = useRouter()
-    const { verifyLoginCode, resendLoginVerification, user } = useAuth({ 
+    const { verifyLoginCode, resendLoginVerification, user, mutate } = useAuth({ 
         middleware: 'guest', 
         redirectIfAuthenticated: '/dashboard',
         skipInitialUserFetch: true,
@@ -64,20 +64,20 @@ const LoginVerification = () => {
             // Clear stored email
             sessionStorage.removeItem('verification_email')
             
-            // After successful verification, fetch the authenticated user and check requirements
+            // Manually fetch user and redirect based on role
             try {
-                const me = await axios.get('/api/user')
-                const u = me?.data || null
+                const userResponse = await axios.get('/api/user')
+                const authenticatedUser = userResponse.data
+                const role = authenticatedUser?.system_role?.name?.toLowerCase?.()
                 
                 // Check if email verification is required first
-                if (!u?.email_verified_at) {
+                if (!authenticatedUser?.email_verified_at) {
                     router.replace('/verify-email')
                     return
                 }
                 
                 // Check if password change is required
-                const role = u?.system_role?.name?.toLowerCase?.()
-                const requiresPasswordChange = u?.must_change_password && 
+                const requiresPasswordChange = authenticatedUser?.must_change_password && 
                     (role === 'caseworker' || role === 'finance' || role === 'director' || role === 'beneficiary')
                 
                 if (requiresPasswordChange) {
@@ -85,29 +85,27 @@ const LoginVerification = () => {
                     return
                 }
                 
-                // All requirements met, route to dashboard
+                // Route based on role
                 let target = '/dashboard'
                 if (role === 'admin') {
                     target = '/admin-dashboard'
                 } else if (role === 'director') {
                     try {
-                        const res = await axios.get('/api/my-facilities')
-                        const fid = Array.isArray(res.data) && res.data.length > 0 ? res.data[0]?.id : null
-                        target = fid ? `/${fid}/dashboard` : '/facility-registration'
+                        const facilitiesRes = await axios.get('/api/my-facilities')
+                        const facilityId = Array.isArray(facilitiesRes.data) && facilitiesRes.data.length > 0 
+                            ? facilitiesRes.data[0]?.id 
+                            : null
+                        target = facilityId ? `/${facilityId}/dashboard` : '/facility-registration'
                     } catch {
                         target = '/facility-registration'
                     }
                 } else if (role === 'employee' || role === 'finance' || role === 'caseworker') {
                     target = '/staff-dashboard'
-                } else if (role === 'beneficiary') {
-                    target = '/dashboard'
                 }
                 router.replace(target)
-                return
             } catch (e) {
-                // Fallback: if user fetch fails, go to verify email or default dashboard
+                // If user fetch fails, redirect to verify-email as fallback
                 router.replace('/verify-email')
-                return
             }
         } catch (error) {
             // Errors are handled by the auth hook
