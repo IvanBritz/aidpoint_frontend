@@ -18,7 +18,11 @@ const AppLayout = ({ children }) => {
                 case 3: // Employee
                     router.push('/facility-dashboard')
                     break
-                case 4: // Beneficiary
+                case 4: // Caseworker
+                case 5: // Finance
+                    router.push('/staff-dashboard')
+                    break
+                case 6: // Beneficiary
                     router.push('/dashboard')
                     break
                 default:
