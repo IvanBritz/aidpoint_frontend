@@ -23,7 +23,7 @@ const AppLayout = ({ children }) => {
     }
 
     useEffect(() => {
-        if (user && user.systemrole_id !== 4) {
+        if (user && user.systemrole_id !== 6) {
             // Not beneficiary, redirect to appropriate dashboard
             switch(user.systemrole_id) {
                 case 1: // Admin
@@ -44,7 +44,7 @@ const AppLayout = ({ children }) => {
     }
 
     // Only allow beneficiary users
-    if (user.systemrole_id !== 4) {
+    if (user.systemrole_id !== 6) {
         return <Loading />
     }
     return (

@@ -89,46 +89,6 @@ const { user, mutate } = useAuth({ middleware: 'auth' })
                             )}
 
                             <form onSubmit={onSubmit} className="space-y-6">
-                                {!user?.must_change_password && (
-                                  <div>
-                                    <div className="flex items-center justify-between">
-                                        <Label htmlFor="verification_code">Verification Code</Label>
-                                        <button
-                                            type="button"
-                                            className="text-sm text-blue-600 underline disabled:opacity-50"
-                                            onClick={async () => {
-                                                setSendingCode(true)
-                                                setErrors({})
-                                                setStatus('')
-                                                try {
-                                                    try { await axios.get('/sanctum/csrf-cookie') } catch (_) {}
-                                                    const res = await axios.post('/email/resend-code')
-                                                    setStatus(res.data.message || 'Verification code sent.')
-                                                } catch (e) {
-                                                    setErrors({ general: ['Failed to send verification code.'] })
-                                                } finally {
-                                                    setSendingCode(false)
-                                                }
-                                            }}
-                                            disabled={sendingCode}
-                                        >
-                                            {sendingCode ? 'Sending...' : 'Send Code'}
-                                        </button>
-                                    </div>
-                                    <Input
-                                        id="verification_code"
-                                        type="text"
-                                        inputMode="numeric"
-                                        pattern="[0-9]{5}"
-                                        value={verificationCode}
-                                        onChange={e => setVerificationCode(e.target.value)}
-                                        className="mt-1 block w-full"
-                                        placeholder="Enter 5-digit code"
-                                        required={!user?.must_change_password}
-                                    />
-                                    <InputError messages={errors.verification_code} className="mt-2" />
-                                  </div>
-                                )}
 
                                 <div>
                                     <Label htmlFor="password">New Password</Label>

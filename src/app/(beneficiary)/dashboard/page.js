@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import axios from '@/lib/axios'
 
 import Header from '@/components/Header'
@@ -10,16 +11,17 @@ import EnrollmentVerificationCard from '@/components/EnrollmentVerificationCard'
 import StatusTracker from '@/components/StatusTracker'
 
 const Dashboard = () => {
+    const router = useRouter()
     const { user } = useAuth({ middleware: 'auth' })
     const [enrollmentStatus, setEnrollmentStatus] = useState('pending')
     const [aidRequestStatus, setAidRequestStatus] = useState(null)
     
     // Redirect to password change if required (prevents infinite loading)
     useEffect(() => {
-        if (user?.must_change_password) {
-            window.location.href = '/change-password'
+        if (user && user.must_change_password) {
+            router.push('/change-password')
         }
-    }, [user])
+    }, [user, router])
 
     // Load statuses from backend so Application Progress is accurate
     useEffect(() => {

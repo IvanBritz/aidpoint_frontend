@@ -82,6 +82,12 @@ export const useAuth = ({ middleware, redirectIfAuthenticated, skipInitialUserFe
                     const loggedInUser = userResponse.data
                     const userRole = loggedInUser?.system_role?.name?.toLowerCase?.()
                     
+                    // Check if email verification is required first
+                    if (!loggedInUser?.email_verified_at) {
+                        router.push('/verify-email')
+                        return
+                    }
+                    
                     // Check if password change is required
                     const isStaffRole = userRole === 'caseworker' || userRole === 'finance'
                     const requiresPasswordChange = loggedInUser.must_change_password && 
@@ -107,6 +113,8 @@ export const useAuth = ({ middleware, redirectIfAuthenticated, skipInitialUserFe
                         }
                     } else if (isStaffRole || userRole === 'employee') {
                         router.push('/staff-dashboard')
+                    } else if (userRole === 'beneficiary') {
+                        router.push('/dashboard')
                     } else {
                         router.push('/dashboard')
                     }
