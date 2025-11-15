@@ -79,6 +79,7 @@ const ReceivedDisbursements = () => {
                       {items.map(d => {
                         // Try multiple shapes to find the caseworker attached to this disbursement
                         const cw = d?.caseworker 
+                          || d?.aid_request?.beneficiary?.caseworker 
                           || d?.aid_request?.caseworker 
                           || d?.aid_request?.caseworker_user 
                           || d?.aid_request?.assigned_caseworker 
