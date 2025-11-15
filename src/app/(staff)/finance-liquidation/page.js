@@ -136,15 +136,10 @@ const FinanceLiquidationPage = () => {
     }
   }
 
-  // Role detection for finance users (supports both camelCase and snake_case)
-  const isFinance = user && (
-    user?.systemRole?.name?.toLowerCase?.() === 'finance' ||
-    user?.system_role?.name?.toLowerCase?.() === 'finance' ||
-    String(user?.systemRole?.name || user?.system_role?.name || '').toLowerCase() === 'finance' ||
-    // Temporary: Allow all authenticated users on localhost for testing
-    (user && typeof window !== 'undefined' && window.location.hostname === 'localhost')
-  )
-  
+  // Role detection for finance users — mirror staff layout logic
+  const roleName = user?.system_role?.name?.toLowerCase?.()
+  const isFinance = roleName === 'finance'
+
   // Role-based access control
   if (user && !isFinance) {
     return (
