@@ -76,15 +76,28 @@ const ReceivedDisbursements = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {items.map(d => (
-                        <tr key={d.id} className="hover:bg-gray-50">
-                          <td className="py-2 pr-4">{d?.aid_request?.beneficiary?.firstname} {d?.aid_request?.beneficiary?.lastname}</td>
-                          <td className="py-2 pr-4">{String(d?.aid_request?.fund_type || d.fund_type || '').toUpperCase()}</td>
-                          <td className="py-2 pr-4">₱{Number(d.amount || 0).toFixed(2)}</td>
-                          <td className="py-2 pr-4">{d?.caseworker?.firstname ? `${d.caseworker.firstname} ${d.caseworker.lastname}` : '-'}</td>
-                          <td className="py-2 pr-4">{d?.beneficiary_received_at ? new Date(d.beneficiary_received_at).toLocaleString() : '-'}</td>
-                        </tr>
-                      ))}
+                      {items.map(d => {
+                        // Try multiple shapes to find the caseworker attached to this disbursement
+                        const cw = d?.caseworker 
+                          || d?.aid_request?.caseworker 
+                          || d?.aid_request?.caseworker_user 
+                          || d?.aid_request?.assigned_caseworker 
+                          || d?.caseworker_user
+
+                        const caseworkerName = cw
+                          ? [cw.firstname, cw.middlename, cw.lastname].filter(Boolean).join(' ')
+                          : (d?.caseworker_name || '-')
+
+                        return (
+                          <tr key={d.id} className="hover:bg-gray-50">
+                            <td className="py-2 pr-4">{d?.aid_request?.beneficiary?.firstname} {d?.aid_request?.beneficiary?.lastname}</td>
+                            <td className="py-2 pr-4">{String(d?.aid_request?.fund_type || d.fund_type || '').toUpperCase()}</td>
+                            <td className="py-2 pr-4">₱{Number(d.amount || 0).toFixed(2)}</td>
+                            <td className="py-2 pr-4">{caseworkerName}</td>
+                            <td className="py-2 pr-4">{d?.beneficiary_received_at ? new Date(d.beneficiary_received_at).toLocaleString() : '-'}</td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
 
