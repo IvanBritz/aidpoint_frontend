@@ -136,10 +136,11 @@ const FinanceLiquidationPage = () => {
     }
   }
 
-  // Role detection for finance users
+  // Role detection for finance users (supports both camelCase and snake_case)
   const isFinance = user && (
-    user?.systemRole?.name?.toLowerCase?.() === 'finance' || 
-    String(user?.systemRole?.name || '').toLowerCase() === 'finance' ||
+    user?.systemRole?.name?.toLowerCase?.() === 'finance' ||
+    user?.system_role?.name?.toLowerCase?.() === 'finance' ||
+    String(user?.systemRole?.name || user?.system_role?.name || '').toLowerCase() === 'finance' ||
     // Temporary: Allow all authenticated users on localhost for testing
     (user && typeof window !== 'undefined' && window.location.hostname === 'localhost')
   )
@@ -152,7 +153,7 @@ const FinanceLiquidationPage = () => {
           <div className="text-red-600 text-lg font-semibold mb-2">🚫 Access Denied</div>
           <div className="text-gray-700">You must be a finance team member to access this page.</div>
           <div className="text-sm text-gray-500 mt-2">
-            Current role: {user?.systemRole?.name || user?.role || 'Unknown'}
+            Current role: {user?.systemRole?.name || user?.system_role?.name || user?.role || 'Unknown'}
           </div>
         </div>
       </div>
