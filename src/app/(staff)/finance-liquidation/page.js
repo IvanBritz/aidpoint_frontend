@@ -136,6 +136,10 @@ const FinanceLiquidationPage = () => {
     }
   }
 
+  // Debug: log user and role
+  console.log('Finance page user object:', user)
+  console.log('Finance page roleName:', user?.system_role?.name, '->', user?.system_role?.name?.toLowerCase?.())
+
   // Role detection for finance users — mirror staff layout logic
   const roleName = user?.system_role?.name?.toLowerCase?.()
   const isFinance = roleName === 'finance'
