@@ -593,7 +593,7 @@ const BeneficiariesPage = () => {
                                                                 {beneficiary.firstname} {beneficiary.middlename} {beneficiary.lastname}
                                                             </div>
                                                             <div className="flex items-center gap-3 text-sm text-gray-500">
-                                                                <span>Age: {beneficiary.age}</span>
+                                                                <span>Age: {beneficiary.age ?? 'N/A'}</span>
                                                                 {Number(beneficiary.age) >= 22 && !beneficiary.exit_letter_requested && (
                                                                     <button
                                                                         onClick={async () => {

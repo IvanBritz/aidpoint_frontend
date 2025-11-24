@@ -673,33 +673,21 @@ export default function SubscriptionPage() {
         })()
     }, [remainingParts, subscriptions.current, trialRemaining])
 
-    // Recompute available plans when plans or current subscription changes
+    // Recompute available plans: show ALL paid plans, exclude Free/0-price
     useEffect(() => {
-        const currentPrice = subscriptions.current?.subscription_plan?.price ? parseFloat(subscriptions.current.subscription_plan.price) : 0
-        const currentPlanId = subscriptions.current?.plan_id
         const filtered = allPlans.filter(p => {
             const price = p.price ? parseFloat(p.price) : 0
             const name = (p.plan_name || '').toLowerCase()
-            
-            // Skip the generic 'free' plan
             if (name === 'free') return false
-            
-            // Skip current plan (same plan_id)
-            if (p.plan_id === currentPlanId) return false
-            
-            // Show ALL plans with price > current plan price (upgrades only)
-            return price > currentPrice
+            return price > 0
         })
-        
-        // Sort by price ascending
         filtered.sort((a, b) => {
             const priceA = parseFloat(a.price) || 0
             const priceB = parseFloat(b.price) || 0
             return priceA - priceB
         })
-        
         setAvailablePlans(filtered)
-    }, [allPlans, subscriptions.current])
+    }, [allPlans])
 
     if (loading) {
         return (

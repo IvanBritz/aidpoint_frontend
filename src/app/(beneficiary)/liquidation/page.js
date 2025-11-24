@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Header from '@/components/Header'
 import { useAuth } from '@/hooks/auth'
 import axios from '@/lib/axios'
 import ReceiptUploadForm from '@/components/ReceiptUploadForm'
 import SimpleLiquidationSuccessModal from '@/components/SimpleLiquidationSuccessModal'
+import ReceiptReviewModal from '@/components/ReceiptReviewModal'
 
 const Liquidation = () => {
   const { user } = useAuth({ middleware: 'auth' })
@@ -24,6 +25,7 @@ const Liquidation = () => {
   const [success, setSuccess] = useState(null)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [submittedLiquidationDetails, setSubmittedLiquidationDetails] = useState(null)
+  const [reviewOpen, setReviewOpen] = useState(false)
   
   // Liquidation history state
   const [liquidations, setLiquidations] = useState([])
@@ -40,6 +42,25 @@ const Liquidation = () => {
       loadAvailableDisbursements()
     }
   }, [user])
+
+  // Keep a ref of previous liquidations to detect status transitions
+  const prevLiquidationsRef = useRef([])
+
+  // When liquidations change, detect newly rejected items and refresh available disbursements
+  useEffect(() => {
+    const prev = prevLiquidationsRef.current || []
+    if (prev.length > 0 && liquidations.length > 0) {
+      const newlyRejected = liquidations.filter(l => {
+        const wasPrev = prev.find(p => p.id === l.id)
+        return l.status === 'rejected' && (!wasPrev || wasPrev.status !== 'rejected')
+      })
+      if (newlyRejected.length > 0) {
+        // Refresh available disbursements so rejected disbursements reappear
+        loadAvailableDisbursements()
+      }
+    }
+    prevLiquidationsRef.current = liquidations
+  }, [liquidations])
 
   const loadLiquidations = async () => {
     try {
@@ -150,6 +171,16 @@ const Liquidation = () => {
     return 0
   }
 
+  const getTotalReceiptAmount = () => {
+    return receipts.reduce((sum, receipt) => sum + (parseFloat(receipt.amount) || 0), 0)
+  }
+
+  const isReceiptTotalExceeding = () => {
+    const disb = getDisbursedAmount()
+    if (!disb || disb <= 0) return false
+    return getTotalReceiptAmount() > disb
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     
@@ -180,6 +211,20 @@ const Liquidation = () => {
       }
     }
 
+    // All validations passed; open review modal to confirm submission
+    setError(null)
+    setReviewOpen(true)
+  }
+
+  // Called after user confirms in the review modal
+  const submitConfirmed = async () => {
+    // Prevent submission if receipt total exceeds disbursed amount
+    if (isReceiptTotalExceeding()) {
+      setError(`Total receipt amount (${formatCurrency(getTotalReceiptAmount())}) exceeds disbursed amount (${formatCurrency(getDisbursedAmount())}). Please correct the amounts before submitting.`)
+      setReviewOpen(false)
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -187,12 +232,12 @@ const Liquidation = () => {
 
       const formData = new FormData()
       formData.append('disbursement_id', selectedDisbursement)
-      
+
       // Get disbursement type from selected disbursement
       const selectedDisbursementData = availableDisbursements.find(d => d.id.toString() === selectedDisbursement)
       formData.append('disbursement', selectedDisbursementData?.fund_type || 'other')
       formData.append('description', description.trim() || '')
-      
+
       receipts.forEach((receipt, index) => {
         formData.append(`receipts[${index}][file]`, receipt.file)
         formData.append(`receipts[${index}][amount]`, parseFloat(receipt.amount))
@@ -206,11 +251,11 @@ const Liquidation = () => {
           'Content-Type': 'multipart/form-data',
         },
       })
-      
+
       // Store details for the success modal
-      const totalReceiptAmount = receipts.reduce((sum, receipt) => sum + parseFloat(receipt.amount), 0)
+      const totalReceiptAmount = receipts.reduce((sum, receipt) => sum + parseFloat(receipt.amount || 0), 0)
       const disbursementType = selectedDisbursementData?.fund_type || 'other'
-      
+
       setSubmittedLiquidationDetails({
         amount: new Intl.NumberFormat('en-PH', {
           style: 'currency',
@@ -222,14 +267,14 @@ const Liquidation = () => {
               'Other',
         disbursementId: selectedDisbursement
       })
-      
+
       setSuccess('Liquidation submitted successfully!')
       setShowSuccessModal(true)
-      
+
       // Reload liquidations and available disbursements
       await loadLiquidations()
       await loadAvailableDisbursements()
-      
+
       // Reset form
       setSelectedDisbursement('')
       setReceipts([{
@@ -241,9 +286,11 @@ const Liquidation = () => {
         description: ''
       }])
       setDescription('')
-      
+      setReviewOpen(false)
+
     } catch (e) {
       setError(e?.response?.data?.message || 'Failed to submit liquidation.')
+      setReviewOpen(false)
     } finally {
       setLoading(false)
     }
@@ -275,7 +322,21 @@ const Liquidation = () => {
       setSuccess('Liquidation successfully submitted for caseworker approval!')
       
       // Reload liquidations to show updated status
-      loadLiquidations()
+      await loadLiquidations()
+      // Remove the related disbursement from the available list immediately (optimistic update)
+      try {
+        const liq = liquidations.find(l => l.id === liquidationId)
+        const disbId = liq?.disbursement_id || response?.data?.disbursement_id
+        if (disbId) {
+          setAvailableDisbursements(prev => prev.filter(d => d.id !== disbId))
+        } else {
+          // Fallback: refresh available disbursements from server
+          await loadAvailableDisbursements()
+        }
+      } catch (e) {
+        // If anything goes wrong, refresh available disbursements to keep UI consistent
+        await loadAvailableDisbursements()
+      }
       
       // Clear success message after 5 seconds
       setTimeout(() => setSuccess(null), 5000)
@@ -511,7 +572,7 @@ const Liquidation = () => {
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || isReceiptTotalExceeding()}
                     className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? 'Submitting...' : 'Submit Liquidation'}
@@ -750,6 +811,14 @@ const Liquidation = () => {
         message="Your liquidation has been submitted for caseworker approval."
         details={submittedLiquidationDetails}
         showWorkflowSteps={true}
+      />
+      <ReceiptReviewModal
+        open={reviewOpen}
+        receipts={receipts}
+        disbursedAmount={getDisbursedAmount()}
+        onCancel={() => setReviewOpen(false)}
+        onConfirm={submitConfirmed}
+        loading={loading}
       />
     </>
   )

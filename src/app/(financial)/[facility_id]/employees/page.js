@@ -26,7 +26,7 @@ const EmployeesPage = () => {
 
     // modals state
     const [tempModal, setTempModal] = useState({ open: false, email: '', password: '' })
-    const [confirmDelete, setConfirmDelete] = useState({ open: false, employee: null })
+    const [statusModal, setStatusModal] = useState({ open: false, employee: null, mode: null }) // mode: 'archive' | 'activate'
     const [editModal, setEditModal] = useState({ open: false, employee: null })
 
     // form state
@@ -118,16 +118,6 @@ const EmployeesPage = () => {
         setEmployees(items)
     }
 
-    const handleDelete = async (emp) => {
-        try {
-            await axios.delete(`/api/employees/${emp.id}`)
-            await reloadEmployees()
-        } catch (err) {
-            console.error('Failed to delete', err)
-            alert(err?.response?.data?.message || 'Failed to delete employee')
-        }
-    }
-
     const handleSave = async (emp, payload) => {
         try {
             await axios.put(`/api/employees/${emp.id}`, payload)
@@ -138,15 +128,14 @@ const EmployeesPage = () => {
         }
     }
 
-    const handleReset = async (emp) => {
-        try {
-            const res = await axios.post(`/api/employees/${emp.id}/reset-password`)
-            const temp = res?.data?.temporary_password
-            if (temp) setTempModal({ open:true, email: emp.email, password: temp })
-        } catch (err) {
-            console.error('Failed to reset password', err)
-            alert(err?.response?.data?.message || 'Failed to reset password')
-        }
+    const handleArchive = async (emp) => {
+        // Set employee status to inactive (archived) without deleting any related data
+        await handleSave(emp, { status: 'inactive' })
+    }
+
+    const handleActivate = async (emp) => {
+        // Reactivate employee so they can regain access to previously managed data
+        await handleSave(emp, { status: 'active' })
     }
 
     if (isLoading) {
@@ -228,7 +217,6 @@ const EmployeesPage = () => {
                         <div className="p-6 bg-white border-b border-gray-200">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-semibold">Employees</h3>
-                                <button onClick={() => router.push(`/${facility_id}/roles`)} className="bg-purple-500 hover:bg-purple-600 text-white text-sm font-semibold py-2 px-3 rounded">Manage Roles</button>
                             </div>
 
                             {loadingEmployees ? (
@@ -255,11 +243,24 @@ const EmployeesPage = () => {
                                                 <td className="py-2 pr-4">{emp.email}</td>
                                                 <td className="py-2 pr-4">{emp.system_role?.name || emp.systemRole?.name || emp.role}</td>
                                                 <td className="py-2 pr-4">{emp.contact_number || '-'}</td>
-                                                <td className="py-2 pr-4 capitalize">{emp.status}</td>
+                                                <td className="py-2 pr-4 capitalize">{emp.status === 'inactive' ? 'Archived' : emp.status}</td>
                                                 <td className="py-2 pr-4 whitespace-nowrap flex gap-2">
                                                     <button className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200" onClick={()=> setEditModal({ open: true, employee: emp })}>Edit</button>
-                                                    <button className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200" onClick={()=> handleReset(emp)}>Reset Password</button>
-                                                    <button className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200" onClick={()=> setConfirmDelete({ open: true, employee: emp })}>Delete</button>
+                                                    {emp.status === 'active' ? (
+                                                        <button
+                                                            className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                                                            onClick={()=> setStatusModal({ open: true, employee: emp, mode: 'archive' })}
+                                                        >
+                                                            Archive
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            className="px-2 py-1 rounded bg-green-100 text-green-800 hover:bg-green-200"
+                                                            onClick={()=> setStatusModal({ open: true, employee: emp, mode: 'activate' })}
+                                                        >
+                                                            Activate
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
@@ -282,13 +283,23 @@ const EmployeesPage = () => {
             />
 
             <ConfirmModal
-                isOpen={confirmDelete.open}
-                onClose={() => setConfirmDelete({ open: false, employee: null })}
-                onConfirm={async ()=>{ if (!confirmDelete.employee) return; await handleDelete(confirmDelete.employee); setConfirmDelete({ open:false, employee:null }) }}
-                title="Delete Employee"
-                message={`Are you sure you want to delete ${confirmDelete.employee ? (confirmDelete.employee.firstname + ' ' + confirmDelete.employee.lastname) : ''}? This action cannot be undone.`}
-                confirmText="Delete"
-                type="danger"
+                isOpen={statusModal.open}
+                onClose={() => setStatusModal({ open: false, employee: null, mode: null })}
+                onConfirm={async () => {
+                    if (!statusModal.employee || !statusModal.mode) return
+                    if (statusModal.mode === 'archive') {
+                        await handleArchive(statusModal.employee)
+                    } else if (statusModal.mode === 'activate') {
+                        await handleActivate(statusModal.employee)
+                    }
+                    setStatusModal({ open: false, employee: null, mode: null })
+                }}
+                title={statusModal.mode === 'archive' ? 'Archive Employee' : 'Activate Employee'}
+                message={statusModal.mode === 'archive'
+                    ? `Are you sure you want to archive ${statusModal.employee ? (statusModal.employee.firstname + ' ' + statusModal.employee.lastname) : ''}? They will be deactivated but their data will be preserved.`
+                    : `Are you sure you want to activate ${statusModal.employee ? (statusModal.employee.firstname + ' ' + statusModal.employee.lastname) : ''}? They will regain access to their managed data.`}
+                confirmText={statusModal.mode === 'archive' ? 'Archive' : 'Activate'}
+                type={statusModal.mode === 'archive' ? 'warning' : 'info'}
             />
 
             <EmployeeEditModal

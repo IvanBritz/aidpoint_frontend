@@ -15,10 +15,11 @@ const AppLayout = ({ children }) => {
     // Initialize subscription checker for directors
     useSubscriptionChecker(user)
 
-    // Redirect archived non-directors (finance) to suspension notice
+    // Redirect archived/inactive non-directors (finance) to suspension notice
     useEffect(() => {
         const role = user?.system_role?.name?.toLowerCase?.()
-        if (user && role !== 'director' && String(user.status || '').toLowerCase() === 'archived') {
+        const status = String(user?.status || '').toLowerCase()
+        if (user && role !== 'director' && (status === 'archived' || status === 'inactive')) {
             router.replace('/suspended')
         }
     }, [user, router])

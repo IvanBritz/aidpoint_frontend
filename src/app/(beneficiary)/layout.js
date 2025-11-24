@@ -10,16 +10,20 @@ const AppLayout = ({ children }) => {
     const { user } = useAuth({ middleware: 'auth' })
     const router = useRouter()
 
-    // Redirect archived beneficiaries to suspension notice
+    // Redirect archived/inactive beneficiaries to suspension notice
     useEffect(() => {
-        if (user && String(user.status || '').toLowerCase() === 'archived') {
+        const status = String(user?.status || '').toLowerCase()
+        if (user && (status === 'archived' || status === 'inactive')) {
             router.replace('/suspended')
         }
     }, [user, router])
 
-    // If archived and redirecting, avoid rendering beneficiary UI to prevent overlap
-    if (user && String(user.status || '').toLowerCase() === 'archived') {
-        return <Loading />
+    // If archived/inactive and redirecting, avoid rendering beneficiary UI to prevent overlap
+    {
+        const status = String(user?.status || '').toLowerCase()
+        if (user && (status === 'archived' || status === 'inactive')) {
+            return <Loading />
+        }
     }
 
     useEffect(() => {

@@ -84,6 +84,12 @@ const PendingFundRequests = () => {
                       <div>
                         <div className="font-semibold text-gray-900">{r?.beneficiary?.firstname} {r?.beneficiary?.lastname}</div>
                         <div className="text-sm text-gray-600">Type: <span className="font-medium">{r.fund_type}</span> • Amount: ₱{Number(r.amount).toFixed(2)}</div>
+                        {r.reviewed_at && (
+                          <div className="text-xs text-gray-700 mt-1">
+                            Approved by Caseworker: <span className="font-medium">{r.reviewer_name || (r.reviewer ? `${r.reviewer.firstname} ${r.reviewer.lastname}` : 'Caseworker')}</span>
+                            {' '}on {new Date(r.reviewed_at).toLocaleString()}
+                          </div>
+                        )}
                         {r.purpose && <div className="text-sm text-gray-500 mt-1">{r.purpose}</div>}
                         <div className="text-xs text-gray-400 mt-1">Submitted: {new Date(r.created_at).toLocaleString()}</div>
                       </div>

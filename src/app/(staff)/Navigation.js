@@ -97,9 +97,19 @@ const Navigation = ({ user }) => {
                                         Attendance
                                     </NavLink>
                                     <NavLink
+                                        href="/approved-submissions"
+                                        active={usePathname() === '/approved-submissions'}>
+                                        Approved Submissions
+                                    </NavLink>
+                                    <NavLink
                                         href="/liquidation-completed"
                                         active={usePathname() === '/liquidation-completed'}>
                                         Completed Liquidations
+                                    </NavLink>
+                                    <NavLink
+                                        href="/audit-logs"
+                                        active={usePathname() === '/audit-logs'}>
+                                        Audit Logs
                                     </NavLink>
                                 </>
                             )}
@@ -258,9 +268,19 @@ className="inline-flex items-center justify-center p-2 rounded-md text-blue-600 
                                     Attendance
                                 </ResponsiveNavLink>
                                 <ResponsiveNavLink
+                                    href="/approved-submissions"
+                                    active={usePathname() === '/approved-submissions'}>
+                                    Approved Submissions
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
                                     href="/liquidation-completed"
                                     active={usePathname() === '/liquidation-completed'}>
                                     Completed Liquidations
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
+                                    href="/audit-logs"
+                                    active={usePathname() === '/audit-logs'}>
+                                    Audit Logs
                                 </ResponsiveNavLink>
                             </>
                         )}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/auth'
-import Navigation from '@/app/(staff)/Navigation'
+import CaseworkerSideNavigation from '@/app/(staff)/CaseworkerSideNavigation'
 import FinanceSideNavigation from '@/app/(financial)/FinanceSideNavigation'
 import DirectorSideNavigation from '@/app/(financial)/DirectorSideNavigation'
 import Loading from '@/components/Loading'
@@ -17,22 +17,20 @@ const AppLayout = ({ children }) => {
     const isStaff = roleName === 'caseworker' || roleName === 'finance'
     const isDirector = roleName === 'director'
     const isFinance = roleName === 'finance'
-    
-    // Redirect archived staff (center expired) to suspension notice
-    useEffect(() => {
-        if (user && roleName !== 'director' && String(user.status || '').toLowerCase() === 'archived') {
-            if (!pathname?.startsWith('/suspended')) router.replace('/suspended')
-        }
-    }, [user, roleName, router, pathname])
 
-    // While redirecting archived users, avoid rendering underlying dashboards to prevent overlap
-    if (user && roleName !== 'director' && String(user.status || '').toLowerCase() === 'archived' && !pathname?.startsWith('/suspended')) {
-        return <Loading />
-    }
+    const status = String(user?.status || '').toLowerCase()
+    const isArchivedOrInactive = user && roleName !== 'director' && (status === 'archived' || status === 'inactive')
+    
+    // Redirect archived/inactive staff to suspension notice
+    useEffect(() => {
+        if (isArchivedOrInactive && !pathname?.startsWith('/suspended')) {
+            router.replace('/suspended')
+        }
+    }, [isArchivedOrInactive, router, pathname])
 
     // Allow directors to access director-specific routes AND staff routes like liquidation-completed
     const isDirectorRoute = pathname?.startsWith('/director-')
-    const isSharedStaffRoute = ['/liquidation-completed', '/staff-dashboard'].some(route => pathname?.startsWith(route))
+    const isSharedStaffRoute = ['/liquidation-completed', '/staff-dashboard', '/audit-logs'].some(route => pathname?.startsWith(route))
     const canAccess = isStaff || isDirectorRoute || (isDirector && isSharedStaffRoute)
 
     useEffect(() => {
@@ -54,6 +52,8 @@ const AppLayout = ({ children }) => {
             }
         }
     }, [user, canAccess, roleName, router])
+
+    if (isArchivedOrInactive && !pathname?.startsWith('/suspended')) return <Loading />
 
     if (!user) return <Loading />
     if (!canAccess) return <Loading />
@@ -95,11 +95,16 @@ const AppLayout = ({ children }) => {
         )
     }
 
-    // For caseworkers, use top navigation
+    // For caseworkers, use sidebar navigation
     return (
         <div className="min-h-screen bg-gray-100">
-            <Navigation user={user} />
-            <main>{children}</main>
+            <CaseworkerSideNavigation user={user} />
+            <div className="lg:pl-64">
+                <div className="lg:hidden">
+                    <div className="h-16"></div>
+                </div>
+                <main>{children}</main>
+            </div>
         </div>
     )
 }

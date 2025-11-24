@@ -176,11 +176,28 @@ export const useAuth = ({ middleware, redirectIfAuthenticated, skipInitialUserFe
     }
 
     const logout = async () => {
-        if (!error) {
-            await axios.post('/logout').then(() => mutate())
+        try {
+            // Ensure we have a valid CSRF cookie before calling Laravel logout
+            await csrf()
+        } catch (_) {
+            // If CSRF fetch fails, still try best-effort logout below
         }
 
-        window.location.pathname = '/login'
+        try {
+            if (!error) {
+                await axios.post('/logout')
+            }
+        } catch (e) {
+            // Ignore CSRF mismatch or unauthenticated errors on logout
+            const status = e?.response?.status
+            if (status && status !== 419 && status !== 401) {
+                throw e
+            }
+        } finally {
+            // Clear SWR cache and always redirect to login
+            mutate(null, false)
+            window.location.pathname = '/login'
+        }
     }
 
     useEffect(() => {

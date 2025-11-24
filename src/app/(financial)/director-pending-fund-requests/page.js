@@ -6,6 +6,7 @@ import Header from '@/components/Header'
 import { useAuth } from '@/hooks/auth'
 import axios from '@/lib/axios'
 import ApprovalNotesModal from '@/components/ApprovalNotesModal'
+import NotificationToast from '@/components/NotificationToast'
 
 const DirectorPendingFundRequests = () => {
   const { user } = useAuth({ middleware: 'auth' })
@@ -16,6 +17,9 @@ const DirectorPendingFundRequests = () => {
   const [meta, setMeta] = useState(null)
   const [modal, setModal] = useState({ open: false, id: null, action: 'approved' })
   const [saving, setSaving] = useState(false)
+  const [bulkModalOpen, setBulkModalOpen] = useState(false)
+  const [bulkSaving, setBulkSaving] = useState(false)
+  const [notification, setNotification] = useState(null)
 
   // Redirect non-directors to appropriate pages
   useEffect(() => {
@@ -63,9 +67,36 @@ const DirectorPendingFundRequests = () => {
       setModal({ open: false, id: null, action: 'approved' })
       await load(meta?.current_page || 1)
     } catch (e) {
-      alert(e?.response?.data?.message || `Unable to ${modal.action} request`)
+      setNotification({ type: 'error', title: 'Unable to complete', message: e?.response?.data?.message || `Unable to ${modal.action} request` })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const confirmBulkApprove = async (notes) => {
+    if (!items || items.length === 0) return
+    setBulkSaving(true)
+    let success = 0
+    let failed = 0
+    // Process sequentially for reliability; keeps load light on server
+    for (const r of items) {
+      try {
+        await axios.post(`/api/aid-requests/${r.id}/director-review`, { status: 'approved', notes })
+        success++
+      } catch (e) {
+        failed++
+        console.error('Bulk approve failed for', r.id, e?.response?.data || e)
+      }
+    }
+
+    setBulkModalOpen(false)
+    setBulkSaving(false)
+    await load(meta?.current_page || 1)
+
+    if (failed === 0) {
+      setNotification({ type: 'success', title: 'Bulk Approve Complete', message: `Successfully approved ${success} request(s).` })
+    } else {
+      setNotification({ type: 'error', title: 'Partial Success', message: `Approved ${success} request(s). ${failed} failed.` })
     }
   }
 
@@ -99,7 +130,19 @@ const DirectorPendingFundRequests = () => {
                   <h2 className="text-xl font-semibold text-gray-900">Requests awaiting director approval</h2>
                   <p className="text-sm text-gray-600">Finance-approved requests requiring final director approval</p>
                 </div>
-                <button onClick={() => load(meta?.current_page || 1)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md">Refresh</button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => load(meta?.current_page || 1)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md">Refresh</button>
+                  {items.length > 0 && (
+                    <button
+                      onClick={() => setBulkModalOpen(true)}
+                      disabled={bulkSaving}
+                      title="Approve all displayed requests"
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md disabled:opacity-50"
+                    >
+                      {bulkSaving ? 'Approving...' : 'Bulk Approve'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {loading ? (
@@ -173,10 +216,12 @@ const DirectorPendingFundRequests = () => {
                             </div>
                           )}
                           
-                          <div className="text-xs text-gray-500 flex items-center gap-4">
+                          <div className="text-xs text-gray-700 flex flex-col md:flex-row md:items-center md:gap-4">
                             <span>Beneficiary: {r?.beneficiary?.email}</span>
-                            <span>•</span>
-                            <span>Finance Approved: {new Date(r.finance_reviewed_at).toLocaleString()}</span>
+                            <span className="hidden md:inline">•</span>
+                            <span>Caseworker Approved: <span className="font-medium">{r.caseworker_name || (r.reviewer ? `${r.reviewer.firstname} ${r.reviewer.lastname}` : 'Caseworker')}</span> — {r.reviewed_at ? new Date(r.reviewed_at).toLocaleString() : 'N/A'}</span>
+                            <span className="hidden md:inline">•</span>
+                            <span>Finance Approved: <span className="font-medium">{r.finance_name || (r.financeReviewer ? `${r.financeReviewer.firstname} ${r.financeReviewer.lastname}` : 'Finance')}</span> — {r.finance_reviewed_at ? new Date(r.finance_reviewed_at).toLocaleString() : 'N/A'}</span>
                           </div>
                         </div>
                         
@@ -233,6 +278,16 @@ const DirectorPendingFundRequests = () => {
         onConfirm={confirmModal}
         loading={saving}
       />
+      <ApprovalNotesModal
+        open={bulkModalOpen}
+        title={'Bulk Final Approval - Displayed Requests'}
+        description={'This will final-approve all requests displayed on this page. This action will process each request sequentially. Add a note to include with all approvals if needed.'}
+        actionLabel={'Bulk Approve'}
+        onCancel={() => setBulkModalOpen(false)}
+        onConfirm={confirmBulkApprove}
+        loading={bulkSaving}
+      />
+      <NotificationToast notification={notification} onClose={() => setNotification(null)} />
     </>
   )
 }

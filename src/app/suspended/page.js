@@ -12,16 +12,29 @@ export default function SuspendedPage() {
     const router = useRouter()
     const [checking, setChecking] = useState(false)
 
+    const status = String(user?.status || '').toLowerCase()
+    const isDeactivated = status === 'inactive'
+
     const goToHomeByRole = (role) => {
-        if (role === 'director') {
-            router.replace('/dashboard')
-            return
-        }
-        if (role === 'admin') {
+        const r = (role || '').toLowerCase()
+
+        if (r === 'admin') {
             router.replace('/admin-dashboard')
             return
         }
-        // All associated users go to a unified dashboard
+
+        if (r === 'director') {
+            router.replace('/dashboard')
+            return
+        }
+
+        // Staff roles (caseworker/finance/employee) regain access to staff dashboard
+        if (r === 'caseworker' || r === 'finance' || r === 'employee') {
+            router.replace('/staff-dashboard')
+            return
+        }
+
+        // Beneficiaries and any other roles fall back to main dashboard
         router.replace('/dashboard')
     }
 
@@ -51,7 +64,8 @@ export default function SuspendedPage() {
             await axios.get('/api/user')
             const res = await axios.get('/api/subscription-status')
             const role = user?.system_role?.name?.toLowerCase?.()
-            if (res.data?.has_active_subscription && String(user?.status || '').toLowerCase() !== 'archived') {
+            const s = String(user?.status || '').toLowerCase()
+            if (res.data?.has_active_subscription && s !== 'archived' && s !== 'inactive') {
                 goToHomeByRole(role)
                 return
             }
@@ -59,6 +73,17 @@ export default function SuspendedPage() {
             router.refresh()
         } finally {
             setChecking(false)
+        }
+    }
+
+    const handleSignOut = async () => {
+        try {
+            await logout()
+        } catch (_) {
+            // Even if API logout fails (e.g. already logged out), still send user to login
+        } finally {
+            try { localStorage.removeItem('center_suspended') } catch {}
+            window.location.pathname = '/login'
         }
     }
 
@@ -77,9 +102,13 @@ export default function SuspendedPage() {
                             </svg>
                         </div>
 
-                        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Center Subscription Expired</h1>
+                        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">
+                            {isDeactivated ? 'Your Account is Deactivated' : 'Center Subscription Expired'}
+                        </h1>
                         <p className="mt-3 text-gray-600 max-w-2xl mx-auto">
-                            The center subscription has been expired, please wait until the director will renew the subscription.
+                            {isDeactivated
+                                ? 'Your account has been deactivated by the center director. Please contact your director if you believe this is a mistake.'
+                                : 'The center subscription has been expired, please wait until the director will renew the subscription.'}
                         </p>
 
                         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -101,7 +130,7 @@ export default function SuspendedPage() {
                                 )}
                             </button>
                             <button
-                                onClick={logout}
+                                onClick={handleSignOut}
                                 className="inline-flex items-center justify-center px-5 py-2.5 rounded-md font-medium text-red-700 bg-red-50 hover:bg-red-100 ring-1 ring-red-100"
                             >
                                 Sign Out

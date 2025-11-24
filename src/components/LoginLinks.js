@@ -12,7 +12,8 @@ const LoginLinks = () => {
     const [showDropdown, setShowDropdown] = useState(false)
 
     const roleName = user?.system_role?.name?.toLowerCase?.()
-    const isSuspended = String(user?.status || '').toLowerCase() === 'archived'
+    const status = String(user?.status || '').toLowerCase()
+    const isSuspended = status === 'archived' || status === 'inactive'
 
     // Fetch facility ID for financial users and directors
     useEffect(() => {

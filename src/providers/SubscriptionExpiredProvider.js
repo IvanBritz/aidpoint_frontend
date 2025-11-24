@@ -75,11 +75,12 @@ const SubscriptionExpiredProvider = ({ children }) => {
         return router.replace('/dashboard')
     }
 
-    // Non-directors archived → lockout page (and mark suspended immediately)
+    // Non-directors archived/inactive → lockout page (and mark suspended immediately)
     useEffect(() => {
         const role = user?.system_role?.name?.toLowerCase?.()
         if (!user || role === 'director' || role === 'admin') return
-        if (String(user.status || '').toLowerCase() === 'archived') {
+        const status = String(user.status || '').toLowerCase()
+        if (status === 'archived' || status === 'inactive') {
             try { localStorage.setItem('center_suspended', '1') } catch {}
             if (!pathname?.startsWith('/suspended')) {
                 router.replace('/suspended')

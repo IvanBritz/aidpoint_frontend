@@ -34,6 +34,9 @@ export default function EnrollmentVerificationCard({ user }) {
         sao_photo: null,
     })
     const [downloadingDoc, setDownloadingDoc] = useState(null)
+    // Controls the "review before submit" modal so beneficiaries must confirm
+    // their details and documents before anything is sent to the backend.
+    const [showReview, setShowReview] = useState(false)
 
     const submitted = useMemo(() => !!sub, [sub])
 
@@ -92,15 +95,55 @@ export default function EnrollmentVerificationCard({ user }) {
         }
     }
 
-    const onSubmit = async e => {
+    // Opens a preview of a locally selected file (image or PDF) in a new tab.
+    // This only uses the browser File object and does not touch the backend,
+    // so the change is deployment-safe.
+    const openLocalPreview = file => {
+        if (!file) return
+        try {
+            const url = window.URL.createObjectURL(file)
+            window.open(url, '_blank', 'noopener,noreferrer')
+            // Best-effort cleanup after the new tab loads.
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url)
+            }, 10000)
+        } catch (err) {
+            console.error('Preview failed', err)
+            setToast({ open: true, type: 'error', title: 'Preview failed', message: 'Could not open a preview of the file.' })
+        }
+    }
+
+    // Open the review dialog when the form is valid instead of immediately
+    // sending the payload to the backend. This ensures beneficiaries always
+    // see a summary of what they are about to submit.
+    const onSubmit = e => {
         e.preventDefault()
+        setErrors(null)
+
+        // Basic guard in case the native `required` attributes are bypassed.
+        if (!form.enrollment_date || !form.year_level || !form.is_scholar) {
+            setErrors('Please complete all required fields before reviewing your submission.')
+            return
+        }
+        if (form.is_scholar === 'scholar' && !form.scholarship_certification && !sub?.scholarship_certification_path) {
+            setErrors('Scholarship certification is required for scholars.')
+            return
+        }
+
+        setShowReview(true)
+    }
+
+    // Handles the actual network request once the beneficiary confirms the
+    // details in the review modal.
+    const confirmAndSubmit = async () => {
         setErrors(null)
         try {
             setSaving(true)
             const fd = new FormData()
             fd.append('enrollment_date', form.enrollment_date)
             fd.append('year_level', form.year_level)
-            // Laravel's boolean validator expects 1/0 (or true/false boolean). FormData serializes to strings, so send 1/0.
+            // Laravel's boolean validator expects 1/0 (or true/false boolean).
+            // FormData serializes to strings, so send 1/0.
             fd.append('is_scholar', form.is_scholar === 'scholar' ? '1' : '0')
             if (form.enrollment_certification) fd.append('enrollment_certification', form.enrollment_certification)
             if (form.scholarship_certification) fd.append('scholarship_certification', form.scholarship_certification)
@@ -110,6 +153,7 @@ export default function EnrollmentVerificationCard({ user }) {
             })
             setSub(res.data?.data)
             setToast({ open: true, type: 'success', title: 'Submitted successfully', message: 'Wait for your caseworker to review.' })
+            setShowReview(false)
         } catch (err) {
             const msg = err?.response?.data?.message || 'Failed to submit documents'
             setErrors(msg)
@@ -248,30 +292,45 @@ export default function EnrollmentVerificationCard({ user }) {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Enrollment Certification</label>
-                                    <label className="flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-6 text-center hover:border-blue-300">
+                                    <label
+                                        className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-6 text-center ${form.enrollment_certification ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-300'}`}
+                                    >
                                         <div>
                                             <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                                            <div className="mt-2 text-sm text-gray-600">Click to choose image</div>
+                                            <div className="mt-2 text-sm text-gray-600">Click to choose file</div>
                                             {form.enrollment_certification && (
-                                                <div className="mt-1 text-xs text-gray-500 truncate">{form.enrollment_certification.name}</div>
-                                            )}
-                                        </div>
-                                        <input type="file" accept="image/*" className="hidden" onChange={e => setForm(f => ({ ...f, enrollment_certification: e.target.files?.[0] || null }))} />
-                                    </label>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">Scholarship Certification {form.is_scholar === 'scholar' && <span className="text-red-600">(required)</span>}</label>
-                                    <label className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-6 text-center hover:border-blue-300 ${form.is_scholar === 'scholar' ? 'border-gray-300' : 'border-gray-200 opacity-50 cursor-not-allowed'}`}>
-                                        <div>
-                                            <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                                            <div className="mt-2 text-sm text-gray-600">Click to choose image</div>
-                                            {form.scholarship_certification && (
-                                                <div className="mt-1 text-xs text-gray-500 truncate">{form.scholarship_certification.name}</div>
+                                                <div className="mt-1 text-xs text-gray-500 truncate">File selected</div>
                                             )}
                                         </div>
                                         <input
                                             type="file"
-                                            accept="image/*"
+                                            accept="image/png,image/jpeg,application/pdf"
+                                            className="hidden"
+                                            onChange={e => setForm(f => ({ ...f, enrollment_certification: e.target.files?.[0] || null }))}
+                                        />
+                                    </label>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">Scholarship Certification {form.is_scholar === 'scholar' && <span className="text-red-600">(required)</span>}</label>
+                                    <label
+                                        className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-6 text-center ${
+                                            form.is_scholar !== 'scholar'
+                                                ? 'border-gray-200 opacity-50 cursor-not-allowed'
+                                                : form.scholarship_certification
+                                                    ? 'border-green-400 bg-green-50'
+                                                    : 'border-gray-300 hover:border-blue-300'
+                                        }`}
+                                    >
+                                        <div>
+                                            <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                                            <div className="mt-2 text-sm text-gray-600">Click to choose file</div>
+                                            {form.scholarship_certification && (
+                                                <div className="mt-1 text-xs text-gray-500 truncate">File selected</div>
+                                            )}
+                                        </div>
+                                        <input
+                                            type="file"
+                                            accept="image/png,image/jpeg,application/pdf"
                                             className="hidden"
                                             required={form.is_scholar === 'scholar' && !(sub?.scholarship_certification_path)}
                                             disabled={form.is_scholar !== 'scholar'}
@@ -281,15 +340,22 @@ export default function EnrollmentVerificationCard({ user }) {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">SOA</label>
-                                    <label className="flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-6 text-center hover:border-blue-300">
+                                    <label
+                                        className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-6 text-center ${form.sao_photo ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-300'}`}
+                                    >
                                         <div>
                                             <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                                            <div className="mt-2 text-sm text-gray-600">Click to choose image</div>
+                                            <div className="mt-2 text-sm text-gray-600">Click to choose file</div>
                                             {form.sao_photo && (
-                                                <div className="mt-1 text-xs text-gray-500 truncate">{form.sao_photo.name}</div>
+                                                <div className="mt-1 text-xs text-gray-500 truncate">File selected</div>
                                             )}
                                         </div>
-                                        <input type="file" accept="image/*" className="hidden" onChange={e => setForm(f => ({ ...f, sao_photo: e.target.files?.[0] || null }))} />
+                                        <input
+                                            type="file"
+                                            accept="image/png,image/jpeg,application/pdf"
+                                            className="hidden"
+                                            onChange={e => setForm(f => ({ ...f, sao_photo: e.target.files?.[0] || null }))}
+                                        />
                                     </label>
                                 </div>
                             </div>
@@ -314,6 +380,109 @@ export default function EnrollmentVerificationCard({ user }) {
                 )}
             </div>
         </div>
+        {/* Beneficiary review modal – opened before submitting to backend */}
+        {showReview && (
+            <div className="fixed inset-0 z-40 flex items-center justify-center">
+                <div
+                    className="absolute inset-0 bg-gray-900/40"
+                    onClick={() => !saving && setShowReview(false)}
+                />
+                <div className="relative bg-white w-full max-w-xl rounded-lg shadow-xl">
+                    <div className="px-6 py-4 border-b">
+                        <h3 className="text-lg font-semibold text-gray-900">Review your enrollment submission</h3>
+                        <p className="mt-1 text-sm text-gray-600">
+                            Please carefully review your details and documents below. If everything
+                            looks correct, click <span className="font-semibold">Confirm &amp; Submit</span> to
+                            send them to your caseworker.
+                        </p>
+                    </div>
+                    <div className="p-6 space-y-4 text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <div className="text-gray-600">Enrollment Date</div>
+                                <div className="font-medium">{form.enrollment_date || 'Not set'}</div>
+                            </div>
+                            <div>
+                                <div className="text-gray-600">Year Level</div>
+                                <div className="font-medium">{form.year_level || 'Not set'}</div>
+                            </div>
+                            <div>
+                                <div className="text-gray-600">Scholar Status</div>
+                                <div className="font-medium">
+                                    {form.is_scholar === 'scholar' ? 'Scholar' : (form.is_scholar === 'non-scholar' ? 'Non-scholar' : 'Not set')}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-gray-600">Enrollment Certification</div>
+                                <div className="font-medium">
+                                    {form.enrollment_certification ? 'File selected' : 'No file selected'}
+                                </div>
+                                {form.enrollment_certification && (
+                                    <button
+                                        type="button"
+                                        onClick={() => openLocalPreview(form.enrollment_certification)}
+                                        className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                    >
+                                        View file (opens in new tab)
+                                    </button>
+                                )}
+                            </div>
+                            <div>
+                                <div className="text-gray-600">Scholarship Certification</div>
+                                <div className="font-medium">
+                                    {form.scholarship_certification
+                                        ? 'File selected'
+                                        : (sub?.scholarship_certification_path ? 'Existing file on record' : 'No file provided')}
+                                </div>
+                                {form.scholarship_certification && (
+                                    <button
+                                        type="button"
+                                        onClick={() => openLocalPreview(form.scholarship_certification)}
+                                        className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                    >
+                                        View file (opens in new tab)
+                                    </button>
+                                )}
+                            </div>
+                            <div>
+                                <div className="text-gray-600">SOA</div>
+                                <div className="font-medium break-words">
+                                    {form.sao_photo ? 'File selected' : 'No file selected'}
+                                </div>
+                                {form.sao_photo && (
+                                    <button
+                                        type="button"
+                                        onClick={() => openLocalPreview(form.sao_photo)}
+                                        className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                    >
+                                        View file (opens in new tab)
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="px-6 py-4 border-t flex items-center justify-between">
+                        <button
+                            type="button"
+                            onClick={() => !saving && setShowReview(false)}
+                            disabled={saving}
+                            className="px-4 py-2 rounded-md text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                        >
+                            Go Back and Edit
+                        </button>
+                        <button
+                            type="button"
+                            onClick={confirmAndSubmit}
+                            disabled={saving}
+                            className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            {saving ? 'Submitting…' : 'Confirm & Submit'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         <Toast
             open={toast.open}
             type={toast.type}

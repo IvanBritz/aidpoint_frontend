@@ -88,6 +88,15 @@ const DirectorSideNavigation = ({ user }) => {
             ),
         },
         {
+            name: 'Audit Logs',
+            href: '/audit-logs',
+            icon: (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6h13M9 7h13M3 5h3v14H3z" />
+                </svg>
+            ),
+        },
+        {
             name: 'Subscription',
             href: `/${facilityId}/subscription`,
             icon: (
@@ -139,6 +148,15 @@ const DirectorSideNavigation = ({ user }) => {
             icon: (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            ),
+        },
+        {
+            name: 'Audit Logs',
+            href: '/audit-logs',
+            icon: (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6h13M9 7h13M3 5h3v14H3z" />
                 </svg>
             ),
         },

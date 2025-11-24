@@ -21,6 +21,9 @@ const DirectorLiquidationPage = () => {
   const [approvalAction, setApprovalAction] = useState('approve')
   const [approvalNotes, setApprovalNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [bulkModalOpen, setBulkModalOpen] = useState(false)
+  const [bulkNotes, setBulkNotes] = useState('')
+  const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [selectedReceiptLiquidation, setSelectedReceiptLiquidation] = useState(null)
   const [showReceiptsModal, setShowReceiptsModal] = useState(false)
   const [receiptImageUrls, setReceiptImageUrls] = useState({})
@@ -295,6 +298,19 @@ const DirectorLiquidationPage = () => {
               '🔄 Refresh'
             )}
           </button>
+          <button
+            onClick={() => {
+              if (!liquidations || liquidations.length === 0) {
+                showError('No items', 'There are no liquidations to bulk approve.')
+                return
+              }
+              setBulkNotes('')
+              setBulkModalOpen(true)
+            }}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
+          >
+            Bulk Approve
+          </button>
         </div>
       </div>
 
@@ -424,7 +440,10 @@ const DirectorLiquidationPage = () => {
                     <div>
                       <div className="font-semibold">Caseworker</div>
                       <div className="text-xs opacity-75">
-                        ✅ {liquidation.caseworkerApprover ? `${liquidation.caseworkerApprover.firstname} ${liquidation.caseworkerApprover.lastname}` : 'Approved'}
+                        ✅ {(
+                          liquidation.caseworker_name ||
+                          (liquidation.caseworkerApprover ? `${liquidation.caseworkerApprover.firstname} ${liquidation.caseworkerApprover.lastname}` : null)
+                        ) || 'Approved'}
                       </div>
                       <div className="text-xs opacity-60">
                         {new Date(liquidation.caseworker_approved_at).toLocaleDateString()}
@@ -439,7 +458,10 @@ const DirectorLiquidationPage = () => {
                     <div>
                       <div className="font-semibold">Finance</div>
                       <div className="text-xs opacity-75">
-                        ✅ {liquidation.financeApprover ? `${liquidation.financeApprover.firstname} ${liquidation.financeApprover.lastname}` : 'Approved'}
+                        ✅ {(
+                          liquidation.finance_name ||
+                          (liquidation.financeApprover ? `${liquidation.financeApprover.firstname} ${liquidation.financeApprover.lastname}` : null)
+                        ) || 'Approved'}
                       </div>
                       <div className="text-xs opacity-60">
                         {new Date(liquidation.finance_approved_at).toLocaleDateString()}
@@ -628,6 +650,56 @@ const DirectorLiquidationPage = () => {
                 ) : (
                   approvalAction === 'approve' ? '🎉 Complete Workflow' : '❌ Final Reject'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Approve Modal */}
+      {bulkModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg mx-4 border-2 border-green-300">
+            <h3 className="text-xl font-bold mb-4 text-center">Bulk Final Approve ({liquidations.length} items)</h3>
+            <div className="mb-4">
+              <p className="text-sm text-gray-700">You are about to final-approve <strong>{liquidations.length}</strong> liquidations. This will complete the workflow for each selected liquidation.</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
+              <textarea value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} className="w-full p-3 border border-gray-300 rounded-lg" rows={4} placeholder="Add a note to include with all approvals (optional)"></textarea>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setBulkModalOpen(false)} disabled={bulkSubmitting} className="px-4 py-2 bg-gray-100 rounded-lg">Cancel</button>
+              <button
+                onClick={async () => {
+                  try {
+                    setBulkSubmitting(true)
+                    let success = 0
+                    let failed = 0
+                    for (const liq of liquidations) {
+                      try {
+                        await axios.post(`/api/liquidations/${liq.id}/director-approve`, { notes: bulkNotes })
+                        success++
+                      } catch (err) {
+                        failed++
+                        console.error('Failed approving', liq.id, err?.response?.data || err)
+                      }
+                    }
+                    setBulkModalOpen(false)
+                    await loadLiquidations()
+                    if (failed === 0) {
+                      showSuccess('Bulk Approve Complete', `Successfully approved ${success} liquidation(s).`)
+                    } else {
+                      showError('Partial Success', `Approved ${success} liquidation(s). ${failed} failed. Check console for details.`)
+                    }
+                  } finally {
+                    setBulkSubmitting(false)
+                  }
+                }}
+                disabled={bulkSubmitting}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                {bulkSubmitting ? 'Processing...' : 'Confirm Bulk Approve'}
               </button>
             </div>
           </div>

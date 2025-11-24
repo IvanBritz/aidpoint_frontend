@@ -26,64 +26,50 @@ export default function SubmissionReviewModal({ isOpen, submission, onClose, onR
   const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
   const docUrl = (p) => `${backend}/api/documents/${p}`
   
+  // Open a beneficiary document in a new browser tab for review.
+  // We still fetch via Axios to keep the existing auth headers/CSRF setup,
+  // then stream the blob into a temporary object URL instead of forcing a download.
   const downloadDocument = async (path, documentType) => {
-    if (downloadingDoc === documentType) return // Prevent multiple downloads
-    
+    if (downloadingDoc === documentType) return // Prevent multiple parallel opens
+
     setDownloadingDoc(documentType)
     try {
       const response = await axios.get(`/api/documents/${path}`, {
-        responseType: 'blob', // Important for binary data
-        headers: {
-          'Accept': '*/*'
-        },
-        timeout: 30000 // 30 second timeout
+        responseType: 'blob',
+        headers: { 'Accept': '*/*' },
+        timeout: 30000,
       })
-      
-      // Get the filename from response headers or create one
-      const contentDisposition = response.headers['content-disposition']
+
       const contentType = response.headers['content-type'] || ''
-      let ext = 'bin'
-      if (contentType.includes('jpeg')) ext = 'jpg'
-      else if (contentType.includes('png')) ext = 'png'
-      else if (contentType.includes('gif')) ext = 'gif'
-      else if (contentType.includes('webp')) ext = 'webp'
-      let filename = `${documentType}.${ext}`
-      
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename=\"?([^\"]+)\"?/)
-        if (filenameMatch) {
-          filename = filenameMatch[1]
-        }
+
+      // Accept images, PDFs, or generic binary streams – the browser will decide how to render.
+      if (!contentType.includes('image') && !contentType.includes('pdf') && !contentType.includes('octet-stream')) {
+        throw new Error('Unsupported file format received from server')
       }
-      
-      // Validate response is actually image or binary data
-      if (!contentType.includes('image') && !contentType.includes('octet-stream')) {
-        throw new Error('Invalid file format received')
-      }
-      
-      // Use the response blob as-is
-      const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: contentType || 'application/octet-stream' })
+
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: contentType || 'application/octet-stream' })
+
       const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-      
+      window.open(url, '_blank', 'noopener,noreferrer')
+
+      // Best-effort cleanup after the new tab has loaded.
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url)
+      }, 60000)
     } catch (error) {
-      console.error('Download failed:', error)
-      let errorMessage = 'Failed to download document. Please try again.'
-      
+      console.error('Open document failed:', error)
+      let errorMessage = 'Failed to open document. Please try again.'
+
       if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Download timed out. Please try again.'
+        errorMessage = 'Opening the document timed out. Please try again.'
       } else if (error.response?.status === 404) {
         errorMessage = 'Document not found.'
       } else if (error.response?.status === 401) {
-        errorMessage = 'You are not authorized to download this document.'
+        errorMessage = 'You are not authorized to view this document.'
       }
-      
+
       alert(errorMessage)
     } finally {
       setDownloadingDoc(null)
@@ -127,10 +113,10 @@ export default function SubmissionReviewModal({ isOpen, submission, onClose, onR
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-Downloading...
+Opening...
                     </span>
                   ) : (
-'Download'
+'Open file'
                   )}
                 </button>
               </div>
@@ -149,10 +135,10 @@ Downloading...
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Downloading...
+                      Opening...
                     </span>
                   ) : (
-                    'Download'
+                    'Open file'
                   )}
                 </button>
               </div>
@@ -171,10 +157,10 @@ Downloading...
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Downloading...
+                      Opening...
                     </span>
                   ) : (
-                    'Download'
+                    'Open file'
                   )}
                 </button>
               </div>

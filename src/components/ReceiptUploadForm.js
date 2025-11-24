@@ -34,6 +34,29 @@ const ReceiptUploadForm = ({
   }
 
   const handleFileChange = (id, file) => {
+    if (!file) {
+      updateReceipt(id, 'file', null)
+      return
+    }
+
+    const name = file.name || ''
+    const type = file.type || ''
+    const isPdf = type === 'application/pdf' || name.toLowerCase().endsWith('.pdf')
+
+    if (!isPdf) {
+      if (typeof setError === 'function') {
+        setError('Receipt file must be a PDF document (.pdf).')
+      }
+      // Reset the file field for this receipt
+      updateReceipt(id, 'file', null)
+      return
+    }
+
+    // Clear PDF-specific error if previously set
+    if (error && typeof setError === 'function' && error.startsWith('Receipt file must be a PDF')) {
+      setError(null)
+    }
+
     updateReceipt(id, 'file', file)
   }
 
@@ -181,7 +204,7 @@ const ReceiptUploadForm = ({
                 </label>
                 <input
                   type="file"
-                  accept="image/*,.pdf"
+                  accept="application/pdf,.pdf"
                   onChange={(e) => handleFileChange(receipt.id, e.target.files[0])}
                   className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                   required

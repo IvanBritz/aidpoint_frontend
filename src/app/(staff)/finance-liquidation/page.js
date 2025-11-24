@@ -24,6 +24,7 @@ const FinanceLiquidationPage = () => {
   // Step 2 success popup state
   const [showStep2Success, setShowStep2Success] = useState(false)
   const [lastApprovalDetails, setLastApprovalDetails] = useState(null)
+  const [approverNames, setApproverNames] = useState({})
 
   const loadLiquidations = async () => {
     try {
@@ -79,6 +80,59 @@ const FinanceLiquidationPage = () => {
   }
 
   useEffect(() => { if (user) loadLiquidations() }, [user?.id])
+
+  // When liquidations change, fetch approver names for any numeric approver IDs
+  useEffect(() => {
+    const ids = (liquidations || []).map(l => l.caseworker_approved_by || l.approved_by || l.caseworkerApprovedBy).filter(Boolean)
+    const numericIds = ids.map(String).filter(v => /^[0-9]+$/.test(v))
+    if (numericIds.length === 0) return
+
+    const unique = [...new Set(numericIds)]
+    fetchApproverNames(unique)
+  }, [liquidations])
+
+  const fetchApproverNames = async (ids) => {
+    if (!ids || ids.length === 0) return
+    // We'll try multiple plausible endpoints. We store `false` when a lookup failed
+    // to allow retrying later instead of storing permanent `null`.
+    const results = {}
+
+    const fetchUser = async (id) => {
+      const endpoints = [
+        `/api/users/${id}`,
+        `/api/user/${id}`,
+        `/api/staff/${id}`,
+        `/api/staff/users/${id}`,
+        `/api/admin/users/${id}`,
+        `/api/v1/users/${id}`,
+        `/api/v1/user/${id}`
+      ]
+
+      for (const ep of endpoints) {
+        try {
+          const res = await axios.get(ep)
+          const payload = res?.data?.data || res?.data || res
+          const name = payload?.name || payload?.full_name || (payload?.first_name && payload?.last_name ? `${payload.first_name} ${payload.last_name}` : null) || payload?.username || null
+          if (name) return name
+        } catch (e) {
+          // ignore and try the next endpoint
+        }
+      }
+
+      return false
+    }
+
+    await Promise.allSettled(ids.map(async (id) => {
+      try {
+        const name = await fetchUser(id)
+        results[id] = name === false ? false : (name || false)
+      } catch (e) {
+        results[id] = false
+      }
+    }))
+
+    setApproverNames(prev => ({ ...prev, ...results }))
+  }
 
   const handleApprovalAction = (liquidation, action) => {
     setSelectedLiquidation(liquidation)
@@ -138,11 +192,59 @@ const FinanceLiquidationPage = () => {
 
   // Debug: log user and role
   console.log('Finance page user object:', user)
-  console.log('Finance page roleName:', user?.system_role?.name, '->', user?.system_role?.name?.toLowerCase?.())
+  const roleRaw = (user?.system_role?.name ?? user?.systemRole?.name ?? user?.role ?? '')
+  const roleNameLog = typeof roleRaw === 'string' ? roleRaw.toLowerCase() : ''
+  console.log('Finance page roleName:', roleRaw, '->', roleNameLog)
 
   // Role detection for finance users — mirror staff layout logic
-  const roleName = user?.system_role?.name?.toLowerCase?.()
+  const roleSource = (user?.system_role?.name ?? user?.systemRole?.name ?? user?.role ?? '')
+  const roleName = typeof roleSource === 'string' ? roleSource.toLowerCase() : ''
   const isFinance = roleName === 'finance'
+
+  const getCaseworkerName = (l) => {
+    if (!l) return 'Caseworker'
+
+    // Prefer explicit name fields returned by backend payload
+    const direct = l.caseworker_name || l.approved_by_name
+    if (direct && !/^[0-9]+$/.test(String(direct).trim())) return String(direct).trim()
+
+    // If we have a numeric approver id, prefer the fetched name
+    const approverId = l.caseworker_approved_by || l.approved_by || l.caseworkerApprovedBy
+    if (approverId && String(approverId).match(/^[0-9]+$/)) {
+      const fetched = approverNames[String(approverId)]
+      if (typeof fetched === 'string' && fetched) return fetched
+    }
+
+    const candidates = [
+      l.caseworker?.name,
+      l.caseworker?.full_name,
+      l.caseworker?.first_name && l.caseworker?.last_name ? `${l.caseworker.first_name} ${l.caseworker.last_name}` : null,
+      l.caseworker_approved_by_name,
+      l.caseworker_approved_by,
+      l.caseworkerApprovedBy,
+      l.approved_by,
+      l.approved_by_user?.name,
+      l.approved_by_user?.full_name,
+      l.approver?.name,
+      l.approver?.full_name,
+      l.caseworker_user?.name,
+      l.caseworker_user?.full_name
+    ]
+
+    for (const c of candidates) {
+      if (!c) continue
+      try {
+        const s = String(c).trim()
+        if (!s) continue
+        if (/^[0-9]+$/.test(s)) continue
+        return s
+      } catch (e) {
+        continue
+      }
+    }
+
+    return 'Caseworker'
+  }
 
   // Role-based access control
   if (user && !isFinance) {
@@ -313,6 +415,32 @@ const FinanceLiquidationPage = () => {
                         #{liquidation.id}
                       </span>
                     </div>
+                    <div className="text-sm text-gray-600 mt-2">
+                      <span className="font-medium">Approved by:</span>
+                      <span className="ml-2">
+                        {(() => {
+                          const direct = getCaseworkerName(liquidation)
+                          if (direct && direct !== 'Caseworker') return direct
+
+                          const approverId = liquidation.caseworker_approved_by || liquidation.approved_by || liquidation.caseworkerApprovedBy
+                          if (approverId && String(approverId).match(/^[0-9]+$/)) {
+                            const fetched = approverNames[String(approverId)]
+                            if (typeof fetched === 'string' && fetched) return fetched
+                            if (fetched === undefined) return <span className="text-gray-500">Loading name...</span>
+                            if (fetched === false) return (
+                              <span className="inline-flex items-center gap-2">
+                                <span className="text-gray-500">Name unavailable</span>
+                                <button
+                                  onClick={() => fetchApproverNames([String(approverId)])}
+                                  className="text-blue-600 underline text-xs"
+                                >Retry</button>
+                              </span>
+                            )
+                          }
+                          return 'Caseworker'
+                        })()}
+                      </span>
+                    </div>
                   </div>
                   
                   {/* Current Status Badge */}
@@ -329,7 +457,8 @@ const FinanceLiquidationPage = () => {
                     <div>
                       <div className="font-semibold">Caseworker</div>
                       <div className="text-xs opacity-75">
-                        ✅ {new Date(liquidation.caseworker_approved_at).toLocaleDateString()}
+                        <div>✅ {getCaseworkerName(liquidation)}</div>
+                        <div>{liquidation.caseworker_approved_at ? new Date(liquidation.caseworker_approved_at).toLocaleDateString() : 'N/A'}</div>
                       </div>
                     </div>
                   </div>
@@ -365,10 +494,10 @@ const FinanceLiquidationPage = () => {
                   <div className="mb-6">
                     <h4 className="text-sm font-semibold text-gray-700 mb-3">📝 Step 1 Notes from Caseworker:</h4>
                     <div className="bg-green-50 p-3 rounded-lg">
-                      <div className="text-sm font-medium text-green-800 mb-1">👩‍💼 Caseworker Approval</div>
+                      <div className="text-sm font-medium text-green-800 mb-1">👩‍💼 Caseworker Approval — {getCaseworkerName(liquidation)}</div>
                       <div className="text-green-700">{liquidation.caseworker_notes}</div>
                       <div className="text-xs text-green-600 mt-2">
-                        Approved on {new Date(liquidation.caseworker_approved_at).toLocaleDateString()}
+                        Approved on {liquidation.caseworker_approved_at ? new Date(liquidation.caseworker_approved_at).toLocaleDateString() : 'N/A'}
                       </div>
                     </div>
                   </div>
@@ -444,7 +573,7 @@ const FinanceLiquidationPage = () => {
                 <strong>Amount:</strong> ₱{parseFloat(selectedLiquidation.total_disbursed_amount)?.toLocaleString() || 'N/A'}
               </div>
               <div className="text-sm text-gray-500 mb-3">
-                <strong>Caseworker Approved:</strong> {new Date(selectedLiquidation.caseworker_approved_at).toLocaleDateString()}
+                <strong>Caseworker Approved:</strong> {getCaseworkerName(selectedLiquidation)} — {selectedLiquidation.caseworker_approved_at ? new Date(selectedLiquidation.caseworker_approved_at).toLocaleDateString() : 'N/A'}
               </div>
             </div>
             

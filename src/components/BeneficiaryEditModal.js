@@ -43,8 +43,8 @@ const BeneficiaryEditModal = ({ isOpen, initial, onSave, onClose }) => {
                             <input className="border rounded p-2 w-full" value={form.address || ''} onChange={e=>setForm({...form, address:e.target.value})} />
                         </div>
                         <div>
-                            <label className="text-xs text-gray-600">Age</label>
-                            <input type="number" min="1" max="120" className="border rounded p-2 w-full" value={form.age || ''} onChange={e=>setForm({...form, age:e.target.value})} />
+                            <label className="text-xs text-gray-600">Birthdate</label>
+                            <input type="date" className="border rounded p-2 w-full" value={form.birthdate || ''} onChange={e=>setForm({...form, birthdate:e.target.value})} />
                         </div>
                         <div>
                             <label className="text-xs text-gray-600">Enrolled School</label>

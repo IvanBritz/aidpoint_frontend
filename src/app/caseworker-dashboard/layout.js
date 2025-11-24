@@ -2,13 +2,15 @@
 
 import { useAuth } from '@/hooks/auth'
 import Loading from '@/components/Loading'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import LoginLinks from '@/components/LoginLinks'
+import Link from 'next/link'
 
 const CaseworkerLayout = ({ children }) => {
     const { user } = useAuth({ middleware: 'auth' })
     const router = useRouter()
+    const pathname = usePathname()
 
     useEffect(() => {
         if (user && user.systemRole && user.systemRole.name.toLowerCase() !== 'caseworker') {
@@ -45,8 +47,30 @@ const CaseworkerLayout = ({ children }) => {
             <nav className="bg-white border-b border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between h-16">
-                        <div className="flex items-center">
+                        <div className="flex items-center space-x-8">
                             <h1 className="text-xl font-semibold text-gray-900">Financial Aid System</h1>
+                            <div className="hidden md:flex space-x-4">
+                                <Link
+                                    href="/caseworker-dashboard"
+                                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                        pathname === '/caseworker-dashboard'
+                                            ? 'bg-indigo-100 text-indigo-700'
+                                            : 'text-gray-700 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    Dashboard
+                                </Link>
+                                <Link
+                                    href="/approved-submissions"
+                                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                        pathname === '/approved-submissions'
+                                            ? 'bg-indigo-100 text-indigo-700'
+                                            : 'text-gray-700 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    Approved Submissions
+                                </Link>
+                            </div>
                         </div>
                         <div className="flex items-center space-x-4">
                             <LoginLinks />

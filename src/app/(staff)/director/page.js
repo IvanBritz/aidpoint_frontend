@@ -8,6 +8,7 @@ import axios from '@/lib/axios'
 import Loading from '@/components/Loading'
 import NotificationBell from '@/components/NotificationBell'
 import AnalyticsDashboard from '@/components/AnalyticsDashboard'
+import echo from '@/lib/echo'
 
 const DirectorDashboard = () => {
     const { user } = useAuth({ middleware: 'auth' })
@@ -148,6 +149,35 @@ const DirectorDashboard = () => {
         
         return () => clearInterval(interval)
     }, [user, loading, refreshTick])
+
+    useEffect(() => {
+        if (!echo) return
+        if (user?.system_role?.name?.toLowerCase() !== 'director') return
+        const fid = dashboardData?.facility?.id
+        if (!fid) return
+        const channel = echo.private(`facility.${fid}.audit`)
+        channel.listen('.audit.log.recorded', (event) => {
+            setAuditLogs(prev => [
+                {
+                    id: event.id,
+                    event_type: event.event_type,
+                    event_category: event.event_category,
+                    description: event.description,
+                    event_data: event.event_data,
+                    user: event.user,
+                    risk_level: event.risk_level,
+                    created_at: event.created_at,
+                    event_type_color: 'bg-blue-100 text-blue-800',
+                    risk_level_color: 'bg-blue-100 text-blue-800',
+                },
+                ...prev
+            ])
+        })
+        return () => {
+            channel.stopListening('.audit.log.recorded')
+            echo.leave(`facility.${fid}.audit`)
+        }
+    }, [dashboardData?.facility?.id, user])
 
     const formatCurrency = (amount) => {
         return new Intl.NumberFormat('en-PH', {

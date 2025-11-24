@@ -14,20 +14,19 @@ const AuditLogsPage = () => {
   const [auditLogs, setAuditLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [statistics, setStatistics] = useState({})
   const [filterOptions, setFilterOptions] = useState({})
   
   // Filter states
   const [filters, setFilters] = useState({
     event_type: '',
-    category: 'financial',
-    risk_level: '',
+    category: '',
     date_from: '',
     date_to: '',
     search: ''
   })
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const statistics = {}
 
   // Check user permissions
   useEffect(() => {
@@ -36,6 +35,9 @@ const AuditLogsPage = () => {
       if (!['finance', 'director', 'admin', 'caseworker'].includes(roleName)) {
         router.push('/staff-dashboard')
         return
+      }
+      if (roleName === 'finance' && filters.category === '') {
+        setFilters(prev => ({ ...prev, category: 'financial' }))
       }
     }
   }, [user, router])
@@ -87,15 +89,7 @@ const AuditLogsPage = () => {
       }
 
       try {
-        const [statsRes, optionsRes] = await Promise.all([
-          axios.get('/api/audit-logs/statistics'),
-          axios.get('/api/audit-logs/filter-options')
-        ])
-        
-        if (statsRes.data.success) {
-          setStatistics(statsRes.data.data || {})
-        }
-        
+        const optionsRes = await axios.get('/api/audit-logs/filter-options')
         if (optionsRes.data.success) {
           setFilterOptions(optionsRes.data.data || {})
         }
@@ -144,10 +138,10 @@ const AuditLogsPage = () => {
 
   // Clear all filters
   const clearFilters = () => {
+    const roleName = user?.system_role?.name?.toLowerCase()
     setFilters({
       event_type: '',
-      category: 'financial',
-      risk_level: '',
+      category: roleName === 'finance' ? 'financial' : '',
       date_from: '',
       date_to: '',
       search: ''
@@ -167,21 +161,15 @@ const AuditLogsPage = () => {
     })
   }
 
-  // Get risk level icon
-  const getRiskIcon = (riskLevel) => {
-    switch (riskLevel) {
-      case 'critical':
-        return '🔴'
-      case 'high':
-        return '🟠'
-      case 'medium':
-        return '🟡'
-      case 'low':
-        return '🟢'
-      default:
-        return '⚪'
+  const formatCurrency = (value) => {
+    try {
+      return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value || 0))
+    } catch {
+      return `₱${Number(value || 0).toFixed(2)}`
     }
   }
+
+  
 
   if (!user) {
     return (
@@ -220,8 +208,8 @@ const AuditLogsPage = () => {
           <div className="mb-8">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Financial Audit Logs</h1>
-                <p className="mt-2 text-gray-600">Track all financial activities and system events</p>
+                <h1 className="text-3xl font-bold text-gray-900">{roleName === 'director' ? 'Center Audit Logs' : 'Financial Audit Logs'}</h1>
+                <p className="mt-2 text-gray-600">{roleName === 'director' ? 'Track all activities and system events across your center' : 'Track all financial activities and system events'}</p>
               </div>
               <div className="mt-4 lg:mt-0 flex gap-3">
                 <button
@@ -254,7 +242,7 @@ const AuditLogsPage = () => {
           </div>
 
           {/* Statistics Cards */}
-          {!loading && !error && statistics && Object.keys(statistics).length > 0 && (
+          {false && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                 <div className="flex items-center">
@@ -322,7 +310,7 @@ const AuditLogsPage = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
             <div className="p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Filter Audit Logs</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 {/* Event Type */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Event Type</label>
@@ -355,21 +343,7 @@ const AuditLogsPage = () => {
                   </select>
                 </div>
 
-                {/* Risk Level */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Risk Level</label>
-                  <select
-                    value={filters.risk_level}
-                    onChange={(e) => handleFilterChange('risk_level', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">All Levels</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </div>
+                
 
                 {/* Date From */}
                 <div>
@@ -467,9 +441,7 @@ const AuditLogsPage = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         User
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Risk Level
-                      </th>
+                      
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Date
                       </th>
@@ -482,19 +454,14 @@ const AuditLogsPage = () => {
                     {auditLogs.map((log) => (
                       <tr key={log.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <span className="text-lg mr-2">
-                              {getRiskIcon(log.risk_level)}
-                            </span>
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {log.description}
-                              </div>
-                              <div className="flex items-center mt-1">
-                                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${log.event_type_color}`}>
-                                  {log.event_type.replace('_', ' ')}
-                                </span>
-                              </div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {log.description}
+                            </div>
+                            <div className="flex items-center mt-1">
+                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${log.event_type_color}`}>
+                                {log.event_type.replace('_', ' ')}
+                              </span>
                             </div>
                           </div>
                         </td>
@@ -502,27 +469,45 @@ const AuditLogsPage = () => {
                           <div className="text-sm text-gray-900">{log.user.name || 'System'}</div>
                           <div className="text-sm text-gray-500">{log.user.role || 'N/A'}</div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${log.risk_level_color}`}>
-                            {log.risk_level}
-                          </span>
-                        </td>
+                        
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {formatDate(log.created_at)}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
                           {log.event_data && Object.keys(log.event_data).length > 0 ? (
                             <div className="max-w-xs">
-                              {Object.entries(log.event_data).slice(0, 2).map(([key, value]) => (
-                                <div key={key} className="text-xs">
-                                  <span className="font-medium">{key}:</span> {value}
-                                </div>
-                              ))}
-                              {Object.keys(log.event_data).length > 2 && (
-                                <div className="text-xs text-gray-400">
-                                  +{Object.keys(log.event_data).length - 2} more
-                                </div>
-                              )}
+                              {(() => {
+                                const d = log.event_data || {}
+                                const typeVal = d['Fund Type'] ?? d['Type'] ?? d.fund_type ?? d.type
+                                const amountRaw = d['Amount'] ?? d.amount
+                                const amountVal = typeof amountRaw === 'string' ? amountRaw : formatCurrency(amountRaw)
+                                const output = []
+                                if (typeVal !== undefined) {
+                                  output.push(
+                                    <div key="req-type" className="text-xs">
+                                      <span className="font-medium">Request Type:</span> {String(typeVal)}
+                                    </div>
+                                  )
+                                }
+                                if (amountRaw !== undefined) {
+                                  output.push(
+                                    <div key="req-amount" className="text-xs">
+                                      <span className="font-medium">Request Amount:</span> {amountVal}
+                                    </div>
+                                  )
+                                }
+                                if (output.length === 0) {
+                                  return Object.entries(d)
+                                    .filter(([key]) => !['Year','Month','year','month'].includes(key))
+                                    .slice(0, 2)
+                                    .map(([key, value]) => (
+                                      <div key={key} className="text-xs">
+                                        <span className="font-medium">{key}:</span> {String(value)}
+                                      </div>
+                                    ))
+                                }
+                                return output
+                              })()}
                             </div>
                           ) : (
                             <span className="text-gray-400">No additional data</span>
