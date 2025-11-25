@@ -236,7 +236,7 @@ const ar = await axios.get('/api/aid-requests/pending')
                                     <div className="flex items-center justify-between">
                                         <h1 className="text-2xl font-bold text-gray-900">Welcome, {getFullName()}</h1>
                                         <div className="flex items-center gap-3">
-                                            {user?.system_role?.name?.toLowerCase() === 'finance' && (
+                                            {['caseworker','finance','director','admin','beneficiary'].includes(user?.system_role?.name?.toLowerCase()) && (
                                                 <NotificationBell userId={user?.id} userRole={user?.system_role?.name?.toLowerCase()} />
                                             )}
                                             {['finance','director'].includes(user?.system_role?.name?.toLowerCase()) && dashboardData?.facility && (

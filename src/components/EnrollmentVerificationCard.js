@@ -75,7 +75,7 @@ export default function EnrollmentVerificationCard({ user }) {
             else if (contentType.includes('webp')) ext = 'webp'
             let filename = `${documentType}.${ext}`
             if (contentDisposition) {
-                const m = contentDisposition.match(/filename=\"?([^\";]+)\"?/)
+                const m = contentDisposition.match(/filename="?([^";]+)"?/)
                 if (m) filename = m[1]
             }
             const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: contentType || 'application/octet-stream' })

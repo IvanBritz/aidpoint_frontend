@@ -14,45 +14,37 @@ const NotificationBell = ({ userId, userRole }) => {
     const prevUnreadCountRef = useRef(0)
 
     useEffect(() => {
-        if (userId) {
+        if (!userId) return
+        loadNotifications()
+
+        const role = typeof userRole === 'string' ? userRole.toLowerCase() : ''
+        const shouldPoll = ['director', 'finance', 'caseworker', 'beneficiary'].includes(role)
+        const pollMs = shouldPoll ? 10000 : 30000
+        const interval = setInterval(() => {
             loadNotifications()
-            
-            // Setup real-time notification listener with Laravel Echo (client-side only)
-            if (echo) {
-                const channel = echo.private(`user.${userId}`)
-                
-                channel.listen('.notification.sent', (event) => {
-                    console.log('New notification received:', event)
-                    
-                    // Add new notification to the list
-                    setNotifications(prevNotifs => [event, ...prevNotifs])
-                    
-                    // Increment unread count
-                    setUnreadCount(prev => prev + 1)
-                    
-                    // Show new notification indicator
-                    setHasNewNotifications(true)
-                    setTimeout(() => setHasNewNotifications(false), 3000)
-                    
-                    // Update previous unread count ref
-                    prevUnreadCountRef.current = prevUnreadCountRef.current + 1
-                })
-                
-                // Cleanup: leave channel when component unmounts
-                return () => {
-                    channel.stopListening('.notification.sent')
-                    echo.leave(`user.${userId}`)
-                }
-            } else {
-                // Fallback: poll for notifications every 10 seconds when Echo is disabled
-                const interval = setInterval(() => {
-                    loadNotifications()
-                }, 10000)
-                
-                return () => clearInterval(interval)
+        }, pollMs)
+
+        let channel
+        if (echo) {
+            channel = echo.private(`user.${userId}`)
+            channel.listen('.notification.sent', (event) => {
+                console.log('New notification received:', event)
+                setNotifications(prevNotifs => [event, ...prevNotifs])
+                setUnreadCount(prev => prev + 1)
+                setHasNewNotifications(true)
+                setTimeout(() => setHasNewNotifications(false), 3000)
+                prevUnreadCountRef.current = prevUnreadCountRef.current + 1
+            })
+        }
+
+        return () => {
+            clearInterval(interval)
+            if (channel) {
+                channel.stopListening('.notification.sent')
+                echo?.leave(`user.${userId}`)
             }
         }
-    }, [userId])
+    }, [userId, userRole])
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -172,6 +164,10 @@ const NotificationBell = ({ userId, userRole }) => {
                 return `Your aid request for ${formatCurrency(notification.data?.amount)} has been rejected.`
             case 'aid_final_rejected':
                 return `Your fund request was rejected by the director.`
+            case 'fund_request_approved':
+                return `Your fund request has been approved${notification.data?.amount ? ` for ${formatCurrency(notification.data.amount)}` : ''}.`
+            case 'fund_request_rejected':
+                return `Your fund request has been rejected${notification.data?.amount ? ` for ${formatCurrency(notification.data.amount)}` : ''}.`
             case 'beneficiary_assigned':
                 return `${notification.data?.beneficiary_name || 'A beneficiary'} has been assigned to you.`
             case 'new_submission':
@@ -184,6 +180,34 @@ const NotificationBell = ({ userId, userRole }) => {
                 return `Fund request awaiting final approval: ${formatCurrency(notification.data?.amount)} from ${notification.data?.beneficiary_name || 'a beneficiary'}`
             case 'liquidation_completed':
                 return `Liquidation completed for ${notification.data?.beneficiary_name || 'a beneficiary'} (${formatCurrency(notification.data?.amount)}).`
+            case 'liquidation_director_pending':
+                return `Liquidation pending final approval${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'liquidation_pending_final_approval':
+                return `Liquidation pending final approval${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'director_fund_pending':
+                return `Fund request awaiting director approval${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'liquidation_to_review':
+                return `New liquidation report requires your review${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'caseworker_liquidation_pending':
+                return `Liquidation pending your approval${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'disbursement_finance_disbursed':
+                return `New cash from Finance${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''} — ready to disburse.`
+            case 'finance_disbursed':
+                return `Finance disbursed cash${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''} to your queue.`
+            case 'cash_finance_disbursed':
+                return `New cash allocation from Finance${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'liquidation_approved':
+                return `Your liquidation report has been approved${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'liquidation_rejected':
+                return `Your liquidation report has been rejected${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'liquidation_finance_approved':
+                return `Your liquidation report was approved by finance${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''} and sent to the director for final review.`
+            case 'liquidation_finance_rejected':
+                return `Your liquidation report was rejected by finance${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'liquidation_director_approved':
+                return `Your liquidation report has been approved by the director${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'liquidation_director_rejected':
+                return `Your liquidation report was rejected by the director${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
             case 'subscription_expiring':
                 return `Subscription expiring soon: ${notification.data?.plan_name || 'Plan'} on ${new Date(notification.data?.end_date).toLocaleDateString()}.`
             case 'fund_created':
@@ -196,8 +220,48 @@ const NotificationBell = ({ userId, userRole }) => {
                 return `Beneficiary confirmed receipt of ${formatCurrency(notification.data?.amount)}.`
             case 'disbursement_beneficiary_received':
                 return `Your beneficiary confirmed receipt of ${formatCurrency(notification.data?.amount)}.`
+            case 'cash_disbursement_ready':
+                return `Approved request ready to disburse${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+            case 'finance_pending_review':
+                return `New request awaiting finance review${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
             default:
-                return 'You have a new notification.'
+                {
+                    const t = (notification.type || '').toLowerCase()
+                    if (t.includes('liquidation') && t.includes('director') && (t.includes('pending') || t.includes('final')) && t.includes('approval')) {
+                        return `Liquidation pending final approval${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+                    }
+                    if ((t.includes('aid') || t.includes('fund')) && t.includes('director') && (t.includes('pending') || t.includes('final')) && t.includes('approval')) {
+                        return `Fund request awaiting director approval${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+                    }
+                    if ((t.includes('liquidation') && t.includes('pending')) || t.includes('to_review')) {
+                        return `New liquidation report requires your review${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+                    }
+                    if (t.includes('liquidation') && t.includes('approved')) {
+                        return `Your liquidation report has been approved${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+                    }
+                    if (t.includes('liquidation') && t.includes('rejected')) {
+                        return `Your liquidation report has been rejected${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+                    }
+                    if ((t.includes('disbursement') || t.includes('cash')) && (t.includes('finance') || t.includes('disburs'))) {
+                        return `New cash from Finance${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''} — ready to disburse.`
+                    }
+                    if ((t.includes('aid') || t.includes('fund')) && (t.includes('pending') && t.includes('finance'))) {
+                        return `New request awaiting finance review${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+                    }
+                    if ((t.includes('disbursement') || t.includes('cash')) && (t.includes('ready') || t.includes('approved'))) {
+                        return `Approved request ready to disburse${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+                    }
+                    if (t.includes('beneficiary') && t.includes('received')) {
+                        return `Disbursement confirmed by beneficiary${notification.data?.amount ? ` (${formatCurrency(notification.data.amount)})` : ''}.`
+                    }
+                    if ((t.includes('aid') || t.includes('fund')) && t.includes('approved')) {
+                        return `Your fund request has been approved${notification.data?.amount ? ` for ${formatCurrency(notification.data.amount)}` : ''}.`
+                    }
+                    if ((t.includes('aid') || t.includes('fund')) && t.includes('rejected')) {
+                        return `Your fund request has been rejected${notification.data?.amount ? ` for ${formatCurrency(notification.data.amount)}` : ''}.`
+                    }
+                    return 'You have a new notification.'
+                }
         }
     }
 
