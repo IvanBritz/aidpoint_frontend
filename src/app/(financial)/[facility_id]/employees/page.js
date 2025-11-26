@@ -22,6 +22,7 @@ const EmployeesPage = () => {
     const [error, setError] = useState(null)
 
     const [employees, setEmployees] = useState([])
+    const [statusFilter, setStatusFilter] = useState('active')
     const [loadingEmployees, setLoadingEmployees] = useState(true)
 
     // modals state
@@ -217,6 +218,25 @@ const EmployeesPage = () => {
                         <div className="p-6 bg-white border-b border-gray-200">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-semibold">Employees</h3>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-gray-600">Show:</span>
+                                    <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+                                        <button
+                                            className={`px-3 py-1 text-sm ${statusFilter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                            onClick={() => setStatusFilter('active')}
+                                            type="button"
+                                        >
+                                            Active
+                                        </button>
+                                        <button
+                                            className={`px-3 py-1 text-sm border-l border-gray-200 ${statusFilter === 'archived' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                            onClick={() => setStatusFilter('archived')}
+                                            type="button"
+                                        >
+                                            Archived
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             {loadingEmployees ? (
@@ -237,7 +257,7 @@ const EmployeesPage = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {employees.map(emp => (
+                                        {(employees.filter(emp => statusFilter === 'archived' ? emp.status === 'inactive' : emp.status !== 'inactive')).map(emp => (
                                             <tr key={emp.id} className="border-b last:border-b-0">
                                                 <td className="py-2 pr-4">{emp.firstname} {emp.middlename} {emp.lastname}</td>
                                                 <td className="py-2 pr-4">{emp.email}</td>

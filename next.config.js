@@ -5,10 +5,9 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Remove experimental config that might cause issues
-  // experimental: {
-  //   serverComponentsExternalPackages: []
-  // },
+  webpack: (config) => {
+    return config
+  },
 }
 
 module.exports = nextConfig

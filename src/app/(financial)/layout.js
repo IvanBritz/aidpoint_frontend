@@ -19,8 +19,11 @@ const AppLayout = ({ children }) => {
     useEffect(() => {
         const role = user?.system_role?.name?.toLowerCase?.()
         const status = String(user?.status || '').toLowerCase()
+        const path = typeof window !== 'undefined' ? window.location.pathname : ''
         if (user && role !== 'director' && (status === 'archived' || status === 'inactive')) {
-            router.replace('/suspended')
+            if (!String(path).startsWith('/suspended')) {
+                router.replace('/suspended')
+            }
         }
     }, [user, router])
 

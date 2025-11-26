@@ -44,13 +44,8 @@ export default function SuspendedPage() {
 
         const role = user?.system_role?.name?.toLowerCase?.()
         // Directors should handle renewal on Plans; Admins are exempt → admin dashboard
-        if (role === 'director') {
-            router.replace('/plans')
-            return
-        }
-        if (role === 'admin') {
-            router.replace('/admin-dashboard')
-            return
+        if (role === 'director' || role === 'admin') {
+            // Do not auto-redirect to avoid loops; provide explicit actions elsewhere
         }
         // Do not auto-redirect away based on user.status; rely on subscription-status
         // The global provider will move users off this page only when center becomes active.
@@ -80,10 +75,9 @@ export default function SuspendedPage() {
         try {
             await logout()
         } catch (_) {
-            // Even if API logout fails (e.g. already logged out), still send user to login
         } finally {
             try { localStorage.removeItem('center_suspended') } catch {}
-            window.location.pathname = '/login'
+            router.replace('/login')
         }
     }
 

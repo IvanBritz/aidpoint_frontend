@@ -190,3 +190,4 @@ const LiquidationSuccessModal = ({
 }
 
 export default LiquidationSuccessModal
+'use client'

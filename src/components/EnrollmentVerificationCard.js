@@ -37,6 +37,14 @@ export default function EnrollmentVerificationCard({ user }) {
     // Controls the "review before submit" modal so beneficiaries must confirm
     // their details and documents before anything is sent to the backend.
     const [showReview, setShowReview] = useState(false)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024
+    const handleFilePick = (key, file) => {
+        if (!file) { setForm(f => ({ ...f, [key]: null })); return }
+        if (file.size <= 0) { setErrors('Selected file is empty.'); return }
+        if (file.size > MAX_FILE_SIZE) { setErrors('File size must not exceed 10MB.'); return }
+        setErrors(null)
+        setForm(f => ({ ...f, [key]: file }))
+    }
 
     const submitted = useMemo(() => !!sub, [sub])
 
@@ -211,40 +219,40 @@ export default function EnrollmentVerificationCard({ user }) {
                                     {sub.enrollment_certification_path && (
                                         <div>
                                             <div className="text-gray-600">Enrollment Certification</div>
-                                            <button 
-                                                type="button"
-                                                className="text-blue-600 underline hover:text-blue-800 disabled:opacity-50"
-                                                onClick={() => downloadDocument(sub.enrollment_certification_path, 'Enrollment_Certification')}
-                                                disabled={downloadingDoc === 'Enrollment_Certification'}
+                                            <a
+                                                href={getApiUrl(`/api/documents/${sub.enrollment_certification_path}`)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 underline hover:text-blue-800"
                                             >
-{downloadingDoc === 'Enrollment_Certification' ? 'Downloading…' : 'Download'}
-                                            </button>
+                                                View Document
+                                            </a>
                                         </div>
                                     )}
                                     {sub.scholarship_certification_path && (
                                         <div>
                                             <div className="text-gray-600">Scholarship Certification</div>
-                                            <button 
-                                                type="button"
-                                                className="text-blue-600 underline hover:text-blue-800 disabled:opacity-50"
-                                                onClick={() => downloadDocument(sub.scholarship_certification_path, 'Scholarship_Certification')}
-                                                disabled={downloadingDoc === 'Scholarship_Certification'}
+                                            <a
+                                                href={getApiUrl(`/api/documents/${sub.scholarship_certification_path}`)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 underline hover:text-blue-800"
                                             >
-{downloadingDoc === 'Scholarship_Certification' ? 'Downloading…' : 'Download'}
-                                            </button>
+                                                View Document
+                                            </a>
                                         </div>
                                     )}
                                     {sub.sao_photo_path && (
                                         <div>
                                             <div className="text-gray-600">SOA</div>
-                                            <button 
-                                                type="button"
-                                                className="text-blue-600 underline hover:text-blue-800 disabled:opacity-50"
-                                                onClick={() => downloadDocument(sub.sao_photo_path, 'SOA')}
-                                                disabled={downloadingDoc === 'SOA'}
+                                            <a
+                                                href={getApiUrl(`/api/documents/${sub.sao_photo_path}`)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 underline hover:text-blue-800"
                                             >
-{downloadingDoc === 'SOA' ? 'Downloading…' : 'Download'}
-                                            </button>
+                                                View Document
+                                            </a>
                                         </div>
                                     )}
                                 </div>
@@ -317,7 +325,7 @@ export default function EnrollmentVerificationCard({ user }) {
                                             accept="image/png,image/jpeg,application/pdf"
                                             className="hidden"
                                             required={!sub?.enrollment_certification_path}
-                                            onChange={e => setForm(f => ({ ...f, enrollment_certification: e.target.files?.[0] || null }))}
+                                            onChange={e => handleFilePick('enrollment_certification', e.target.files?.[0] || null)}
                                         />
                                     </label>
                                     {form.enrollment_certification && (
@@ -354,7 +362,7 @@ export default function EnrollmentVerificationCard({ user }) {
                                             className="hidden"
                                             required={form.is_scholar === 'scholar' && !(sub?.scholarship_certification_path)}
                                             disabled={form.is_scholar !== 'scholar'}
-                                            onChange={e => setForm(f => ({ ...f, scholarship_certification: e.target.files?.[0] || null }))}
+                                            onChange={e => handleFilePick('scholarship_certification', e.target.files?.[0] || null)}
                                         />
                                     </label>
                                     {form.scholarship_certification && (
@@ -384,7 +392,7 @@ export default function EnrollmentVerificationCard({ user }) {
                                             accept="image/png,image/jpeg,application/pdf"
                                             className="hidden"
                                             required={!sub?.sao_photo_path}
-                                            onChange={e => setForm(f => ({ ...f, sao_photo: e.target.files?.[0] || null }))}
+                                            onChange={e => handleFilePick('sao_photo', e.target.files?.[0] || null)}
                                         />
                                     </label>
                                     {form.sao_photo && (

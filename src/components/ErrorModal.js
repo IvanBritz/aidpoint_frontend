@@ -89,3 +89,4 @@ const ErrorModal = ({
 }
 
 export default ErrorModal
+'use client'

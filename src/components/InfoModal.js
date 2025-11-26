@@ -73,3 +73,4 @@ const InfoModal = ({ isOpen, onClose, title = 'Information', children }) => {
 }
 
 export default InfoModal
+'use client'

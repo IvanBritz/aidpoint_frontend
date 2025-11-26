@@ -89,3 +89,4 @@ const SuccessModal = ({
 }
 
 export default SuccessModal
+'use client'

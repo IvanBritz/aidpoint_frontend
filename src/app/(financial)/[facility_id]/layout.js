@@ -19,10 +19,13 @@ const FacilityLayout = ({ children }) => {
     useEffect(() => {
         const role = user?.system_role?.name?.toLowerCase?.()
         const status = String(user?.status || '').toLowerCase()
+        const path = pathname
         if (user && role !== 'director' && (status === 'archived' || status === 'inactive')) {
-            router.replace('/suspended')
+            if (!String(path || '').startsWith('/suspended')) {
+                router.replace('/suspended')
+            }
         }
-    }, [user, router])
+    }, [user, router, pathname])
 
     useEffect(() => {
         const fetchFacility = async () => {

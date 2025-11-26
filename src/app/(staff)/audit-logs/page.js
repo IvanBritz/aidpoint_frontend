@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import axios from '@/lib/axios'
 import { useAuth } from '@/hooks/auth'
+import echo from '@/lib/echo'
 
 const AuditLogsPage = () => {
   const { user } = useAuth({ middleware: 'auth' })
@@ -27,6 +28,44 @@ const AuditLogsPage = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const statistics = {}
+  const realtimeRef = useRef({ channel: null, initialized: false })
+
+  const isExcludedForFinance = (log) => {
+    const rn = user?.system_role?.name?.toLowerCase()
+    if (rn !== 'finance') return false
+    const type = String(log?.event_type || '').toLowerCase()
+    const module = String(log?.module || '').toLowerCase()
+    const desc = String(log?.description || '').toLowerCase()
+    const moduleHints = [
+      'employee_management',
+      'staff_management',
+      'role_management',
+      'permission_management',
+      'privilege_management',
+      'employees',
+      'roles',
+      'permissions',
+      'privileges',
+    ]
+    const verbs = [
+      'create',
+      'update',
+      'edit',
+      'delete',
+      'remove',
+      'activate',
+      'deactivate',
+      'assign',
+      'unassign',
+      'grant',
+      'revoke',
+    ]
+    const entities = ['employee', 'staff', 'role', 'privilege', 'permission']
+    if (moduleHints.some(m => module.includes(m))) return true
+    if (entities.some(e => type.includes(e)) && verbs.some(v => type.includes(v))) return true
+    if (entities.some(e => desc.includes(e)) && verbs.some(v => desc.includes(v))) return true
+    return false
+  }
 
   // Check user permissions
   useEffect(() => {
@@ -61,11 +100,21 @@ const AuditLogsPage = () => {
 
       const response = await axios.get(`/api/audit-logs?${params.toString()}`)
       
+      if (response.status === 204) {
+        setAuditLogs([])
+        setCurrentPage(1)
+        setTotalPages(1)
+        if (!realtimeRef.current.initialized) initializeRealtime()
+        return
+      }
       if (response.data.success) {
         const data = response.data.data
-        setAuditLogs(data.data || [])
+        const raw = Array.isArray(data.data) ? data.data : []
+        const filtered = raw.filter(log => !isExcludedForFinance(log))
+        setAuditLogs(filtered)
         setCurrentPage(data.current_page || 1)
         setTotalPages(data.last_page || 1)
+        if (!realtimeRef.current.initialized) initializeRealtime()
       } else {
         throw new Error(response.data.message || 'Failed to load audit logs')
       }
@@ -77,6 +126,22 @@ const AuditLogsPage = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const initializeRealtime = () => {
+    if (realtimeRef.current.initialized) return
+    if (!echo) { realtimeRef.current.initialized = true; return }
+    try {
+      const channel = echo.channel('audit.logs')
+      channel.listen('.audit.log.created', () => {
+        loadAuditLogs(1)
+      })
+      channel.listen('.audit.log.updated', () => {
+        loadAuditLogs(currentPage)
+      })
+      realtimeRef.current.channel = channel
+      realtimeRef.current.initialized = true
+    } catch {}
   }
 
   // Load statistics and filter options
@@ -116,7 +181,19 @@ const AuditLogsPage = () => {
       loadAuditLogs(currentPage)
     }, 30000) // 30 seconds
 
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      const ch = realtimeRef.current.channel
+      if (ch) {
+        try {
+          ch.stopListening('.audit.log.created')
+          ch.stopListening('.audit.log.updated')
+          echo?.leave('audit.logs')
+        } catch {}
+      }
+      realtimeRef.current.channel = null
+      realtimeRef.current.initialized = false
+    }
   }, [user, currentPage, filters])
 
   // Handle page change
@@ -139,7 +216,7 @@ const AuditLogsPage = () => {
     const roleName = user?.system_role?.name?.toLowerCase()
     setFilters({
       event_type: '',
-      category: roleName === 'finance' ? 'financial' : '',
+      category: '',
       date_from: '',
       date_to: '',
       search: ''
