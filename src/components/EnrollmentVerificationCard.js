@@ -130,6 +130,16 @@ export default function EnrollmentVerificationCard({ user }) {
             return
         }
 
+        if (!form.enrollment_certification && !sub?.enrollment_certification_path) {
+            setErrors('Enrollment certification is required.')
+            return
+        }
+
+        if (!form.sao_photo && !sub?.sao_photo_path) {
+            setErrors('SOA is required.')
+            return
+        }
+
         setShowReview(true)
     }
 
@@ -306,9 +316,19 @@ export default function EnrollmentVerificationCard({ user }) {
                                             type="file"
                                             accept="image/png,image/jpeg,application/pdf"
                                             className="hidden"
+                                            required={!sub?.enrollment_certification_path}
                                             onChange={e => setForm(f => ({ ...f, enrollment_certification: e.target.files?.[0] || null }))}
                                         />
                                     </label>
+                                    {form.enrollment_certification && (
+                                        <button
+                                            type="button"
+                                            onClick={() => openLocalPreview(form.enrollment_certification)}
+                                            className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                        >
+                                            Preview selected file
+                                        </button>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">Scholarship Certification {form.is_scholar === 'scholar' && <span className="text-red-600">(required)</span>}</label>
@@ -337,6 +357,15 @@ export default function EnrollmentVerificationCard({ user }) {
                                             onChange={e => setForm(f => ({ ...f, scholarship_certification: e.target.files?.[0] || null }))}
                                         />
                                     </label>
+                                    {form.scholarship_certification && (
+                                        <button
+                                            type="button"
+                                            onClick={() => openLocalPreview(form.scholarship_certification)}
+                                            className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                        >
+                                            Preview selected file
+                                        </button>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">SOA</label>
@@ -354,9 +383,19 @@ export default function EnrollmentVerificationCard({ user }) {
                                             type="file"
                                             accept="image/png,image/jpeg,application/pdf"
                                             className="hidden"
+                                            required={!sub?.sao_photo_path}
                                             onChange={e => setForm(f => ({ ...f, sao_photo: e.target.files?.[0] || null }))}
                                         />
                                     </label>
+                                    {form.sao_photo && (
+                                        <button
+                                            type="button"
+                                            onClick={() => openLocalPreview(form.sao_photo)}
+                                            className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                        >
+                                            Preview selected file
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 

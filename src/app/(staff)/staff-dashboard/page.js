@@ -788,16 +788,6 @@ onClick={() => downloadDocument(s.sao_photo_path, `${s.beneficiary?.lastname}_${
                                                         <td className="py-2 pr-4">{new Date(b.created_at).toLocaleDateString()}</td>
                                                         <td className="py-2 pr-4 whitespace-nowrap flex gap-2">
                                                             <button className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200" onClick={()=> setEditModal({ open: true, beneficiary: b })}>Edit</button>
-                                                            <button className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200" onClick={async ()=>{
-                                                                try {
-                                                                    const res = await axios.post(`/api/beneficiaries/${b.id}/reset-password`)
-                                                                    const temp = res?.data?.temporary_password
-                                                                    if (temp) setTempModal({ open: true, email: b.email, password: temp })
-                                                                } catch (err) {
-                                                                    console.error('Failed to reset', err)
-                                                                    alert(err?.response?.data?.message || 'Failed to reset password')
-                                                                }
-                                                            }}>Reset Password</button>
                                                         </td>
                                                     </tr>
                                                 ))}

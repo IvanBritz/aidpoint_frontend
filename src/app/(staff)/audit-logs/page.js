@@ -36,9 +36,7 @@ const AuditLogsPage = () => {
         router.push('/staff-dashboard')
         return
       }
-      if (roleName === 'finance' && filters.category === '') {
-        setFilters(prev => ({ ...prev, category: 'financial' }))
-      }
+      // No default category; caseworker/finance/director/admin can filter by performer role
     }
   }, [user, router])
 
@@ -328,18 +326,18 @@ const AuditLogsPage = () => {
                   </select>
                 </div>
 
-                {/* Category */}
+                {/* Performed By */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Performed By</label>
                   <select
                     value={filters.category}
                     onChange={(e) => handleFilterChange('category', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="">All Categories</option>
-                    <option value="financial">Financial</option>
-                    <option value="user_management">User Management</option>
-                    <option value="system">System</option>
+                    <option value="">All</option>
+                    {(filterOptions.actor_roles || ['beneficiary','caseworker','finance','director']).map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
                   </select>
                 </div>
 

@@ -78,7 +78,7 @@ const CaseworkerDashboard = () => {
     
     const loadAuditLogs = async () => {
         try {
-            const response = await axios.get('/api/audit-logs?per_page=10&category=user_management')
+            const response = await axios.get('/api/audit-logs?per_page=10')
             if (response.data.success) {
                 setAuditLogs(response.data.data.data || [])
             }
