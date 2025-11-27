@@ -1,3 +1,4 @@
+'use client'
 import { Fragment, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { 
@@ -199,4 +200,3 @@ const PopupMessage = ({
 }
 
 export default PopupMessage
-'use client'

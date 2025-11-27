@@ -865,29 +865,12 @@ const CaseworkerLiquidationPage = () => {
                             )}
                           </div>
                           
-                          {/* Receipt Image */}
+                          {/* Receipt Image Link */}
                           <div className="lg:w-64">
                             {receipt.image || receipt.file_path || receipt.receipt_image ? (
-                              <div className="bg-gray-100 rounded-lg p-2">
-                                <div className="text-xs text-gray-500 mb-2">Receipt Image:</div>
-                                <img 
-                                  src={(() => {
-                                    const imagePath = receipt.image || receipt.file_path || receipt.receipt_image
-                                    // Check if it's already a full URL
-                                    if (imagePath?.startsWith('http')) {
-                                      return imagePath
-                                    }
-                                    // Use the proper API endpoint for viewing receipt images inline
-                                    const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
-                                    // Use the dedicated view endpoint that handles authentication and serves images for viewing
-                                    if (receipt.id && selectedReceiptLiquidation?.id) {
-                                      return `${backend}/api/liquidations/${selectedReceiptLiquidation.id}/receipts/${receipt.id}/view`
-                                    }
-                                    // Fallback to storage path if receipt/liquidation IDs are not available
-                                    return `${backend}/storage/${imagePath}`
-                                  })()}
-                                  alt={`Receipt ${index + 1}`}
-                                  className="w-full h-32 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity"
+                              <div className="bg-gray-100 rounded-lg p-4">
+                                <div className="text-xs text-gray-500 mb-3">Receipt Document:</div>
+                                <button
                                   onClick={() => {
                                     const imagePath = receipt.image || receipt.file_path || receipt.receipt_image
                                     let fullUrl = imagePath
@@ -903,18 +886,20 @@ const CaseworkerLiquidationPage = () => {
                                     }
                                     window.open(fullUrl, '_blank')
                                   }}
-                                  onError={(e) => {
-                                    console.error('Failed to load receipt image:', receipt)
-                                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2Y5ZmFmYiIvPjx0ZXh0IHg9IjEwMCIgeT0iNTUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzY5NzM4MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SW1hZ2UgTm90IEF2YWlsYWJsZTwvdGV4dD48L3N2Zz4='
-                                  }}
-                                />
-                                <div className="text-xs text-gray-400 mt-1 text-center">
-                                  Click to view full size
+                                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-sm"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                  View Receipt
+                                </button>
+                                <div className="text-xs text-gray-400 mt-2 text-center">
+                                  Opens in new tab
                                 </div>
                               </div>
                             ) : (
                               <div className="bg-gray-100 rounded-lg p-4 text-center text-gray-500 text-sm">
-                                🖼️<br/>No image available
+                                🖼️<br/>No receipt available
                               </div>
                             )}
                           </div>

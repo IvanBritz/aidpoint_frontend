@@ -35,6 +35,40 @@ const Liquidation = () => {
   const [availableDisbursements, setAvailableDisbursements] = useState([])
   const [disbursementsLoading, setDisbursementsLoading] = useState(false)
 
+  // Helper function to calculate days remaining until end of liquidation month
+  const getDaysRemainingUntilMonthEnd = (receivedAt) => {
+    if (!receivedAt) return null
+    const receivedDate = new Date(receivedAt)
+    const now = new Date()
+    
+    // Get the last day of the month when disbursement was received
+    const lastDayOfMonth = new Date(receivedDate.getFullYear(), receivedDate.getMonth() + 1, 0)
+    lastDayOfMonth.setHours(23, 59, 59, 999)
+    
+    // Calculate days remaining
+    const timeDiff = lastDayOfMonth.getTime() - now.getTime()
+    const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24))
+    
+    return Math.max(0, daysRemaining)
+  }
+
+  // Get urgency level based on days remaining
+  const getUrgencyLevel = (daysRemaining) => {
+    if (daysRemaining === null) return 'normal'
+    if (daysRemaining <= 0) return 'critical' // Red - 0 days or overdue
+    if (daysRemaining <= 5) return 'warning'  // Orange - 5 days or less
+    return 'normal'
+  }
+
+  // Get urgency text for display
+  const getUrgencyText = (daysRemaining) => {
+    if (daysRemaining === null) return ''
+    if (daysRemaining <= 0) return '🔴 DUE TODAY!'
+    if (daysRemaining === 1) return '🟠 1 day left!'
+    if (daysRemaining <= 5) return `🟠 ${daysRemaining} days left!`
+    return ''
+  }
+
   // Load user's liquidations and available disbursements on component mount
   useEffect(() => {
     if (user) {
@@ -104,6 +138,11 @@ const Liquidation = () => {
 
         const baseText = `Disbursement #${d.id} - ₱${Number(remaining).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} remaining (${(fundType || 'Other').toString().toUpperCase()})`
         const display = receivedDisplay ? `${baseText} • Received ${receivedDisplay}` : baseText
+        
+        // Calculate days remaining for urgency
+        const daysRemaining = getDaysRemainingUntilMonthEnd(receivedAt)
+        const urgencyText = getUrgencyText(daysRemaining)
+        const displayWithUrgency = urgencyText ? `${urgencyText} ${display}` : display
 
         return {
           id: d.id,
@@ -113,13 +152,15 @@ const Liquidation = () => {
           remaining_amount: Number(remaining),
           fund_type: fundType,
           received_at: receivedAt,
+          days_remaining: daysRemaining,
+          urgency_level: getUrgencyLevel(daysRemaining),
           reference_no: d.reference_no || null,
           request_month: d.aid_request?.month || null,
           request_year: d.aid_request?.year || null,
           request_period: d.aid_request?.month && d.aid_request?.year
             ? new Date(d.aid_request.year, d.aid_request.month - 1, 1).toLocaleString('en-PH', { month: 'long', year: 'numeric' })
             : null,
-          display_text: display,
+          display_text: displayWithUrgency,
         }
       })
     }
@@ -152,7 +193,32 @@ const Liquidation = () => {
 
       // Do not remove disbursements with existing in-progress liquidations; allow re-liquidation.
       const filtered = Array.isArray(disbursementsData) ? disbursementsData : []
-      setAvailableDisbursements(filtered)
+      
+      // Enrich all disbursements with urgency fields (in case they came from API without them)
+      const enrichedDisbursements = filtered.map(d => {
+        // If already has days_remaining, use it; otherwise calculate
+        if (d.days_remaining !== undefined) return d
+        
+        const receivedAt = d.received_at || d.beneficiary_received_at
+        const daysRemaining = getDaysRemainingUntilMonthEnd(receivedAt)
+        const urgencyLevel = getUrgencyLevel(daysRemaining)
+        const urgencyText = getUrgencyText(daysRemaining)
+        
+        // Update display text with urgency if not already included
+        let displayText = d.display_text || `Disbursement #${d.id}`
+        if (urgencyText && !displayText.includes('🔴') && !displayText.includes('🟠')) {
+          displayText = `${urgencyText} ${displayText}`
+        }
+        
+        return {
+          ...d,
+          days_remaining: daysRemaining,
+          urgency_level: urgencyLevel,
+          display_text: displayText,
+        }
+      })
+      
+      setAvailableDisbursements(enrichedDisbursements)
     } catch (e) {
       console.error('Failed to load available disbursements:', e?.response?.data || e)
       setAvailableDisbursements([])
@@ -435,42 +501,97 @@ const Liquidation = () => {
                       </p>
                     </div>
                   ) : (
-                    <select
-                      value={selectedDisbursement}
-                      onChange={(e) => {
-                        const selected = e.target.value
-                        setSelectedDisbursement(selected)
-                        if (selected) {
-                          const disbursement = availableDisbursements.find(d => d.id.toString() === selected)
-                          if (disbursement) {
-                            // Auto-populate the first receipt with the full disbursement amount
-                            if (receipts.length === 1 && !receipts[0].amount) {
+                    <>
+                      <select
+                        value={selectedDisbursement}
+                        onChange={(e) => {
+                          const selected = e.target.value
+                          setSelectedDisbursement(selected)
+                          if (selected) {
+                            const disbursement = availableDisbursements.find(d => d.id.toString() === selected)
+                            if (disbursement) {
+                              // Auto-populate the first receipt with the full disbursement amount
+                              if (receipts.length === 1 && !receipts[0].amount) {
+                                setReceipts([{
+                                  ...receipts[0],
+                                  amount: disbursement.amount.toString()
+                                }])
+                              }
+                            }
+                          } else {
+                            // Clear auto-populated amount if no disbursement selected
+                            if (receipts.length === 1 && receipts[0].amount && !receipts[0].file) {
                               setReceipts([{
                                 ...receipts[0],
-                                amount: disbursement.amount.toString()
+                                amount: ''
                               }])
                             }
                           }
-                        } else {
-                          // Clear auto-populated amount if no disbursement selected
-                          if (receipts.length === 1 && receipts[0].amount && !receipts[0].file) {
-                            setReceipts([{
-                              ...receipts[0],
-                              amount: ''
-                            }])
-                          }
+                        }}
+                        className={`w-full rounded-md shadow-sm focus:ring-2 ${
+                          (() => {
+                            const selected = availableDisbursements.find(d => d.id.toString() === selectedDisbursement)
+                            if (!selected) return 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                            if (selected.urgency_level === 'critical') return 'border-red-500 border-2 bg-red-50 focus:ring-red-500 focus:border-red-500'
+                            if (selected.urgency_level === 'warning') return 'border-orange-500 border-2 bg-orange-50 focus:ring-orange-500 focus:border-orange-500'
+                            return 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                          })()
+                        }`}
+                        required
+                      >
+                        <option value="">Select a disbursement to liquidate</option>
+                        {availableDisbursements.map(disbursement => (
+                          <option 
+                            key={disbursement.id} 
+                            value={disbursement.id}
+                            className={
+                              disbursement.urgency_level === 'critical' ? 'text-red-700 font-bold' :
+                              disbursement.urgency_level === 'warning' ? 'text-orange-700 font-semibold' : ''
+                            }
+                          >
+                            {disbursement.display_text}
+                          </option>
+                        ))}
+                      </select>
+                      
+                      {/* Urgency warning banner */}
+                      {selectedDisbursement && (() => {
+                        const selected = availableDisbursements.find(d => d.id.toString() === selectedDisbursement)
+                        if (!selected) return null
+                        
+                        if (selected.urgency_level === 'critical') {
+                          return (
+                            <div className="mt-2 p-3 bg-red-100 border border-red-400 rounded-md">
+                              <div className="flex items-center">
+                                <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-red-800 font-bold text-sm">
+                                  ⚠️ URGENT: Liquidation deadline is TODAY! Please submit your receipts immediately.
+                                </span>
+                              </div>
+                            </div>
+                          )
                         }
-                      }}
-                      className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    >
-                      <option value="">Select a disbursement to liquidate</option>
-                      {availableDisbursements.map(disbursement => (
-                        <option key={disbursement.id} value={disbursement.id}>
-                          {disbursement.display_text}
-                        </option>
-                      ))}
-                    </select>
+                        
+                        if (selected.urgency_level === 'warning') {
+                          return (
+                            <div className="mt-2 p-3 bg-orange-100 border border-orange-400 rounded-md">
+                              <div className="flex items-center">
+                                <svg className="w-5 h-5 text-orange-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-orange-800 font-semibold text-sm">
+                                  ⏰ Warning: Only {selected.days_remaining} day{selected.days_remaining !== 1 ? 's' : ''} remaining to liquidate this disbursement before the month ends.
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        }
+                        
+                        return null
+                      })()}
+                    </>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
                     Select the specific disbursement you want to liquidate. The disbursement type will be automatically determined.

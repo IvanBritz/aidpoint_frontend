@@ -553,24 +553,76 @@ const AuditLogsPage = () => {
                             <div className="max-w-xs">
                               {(() => {
                                 const d = log.event_data || {}
-                                const typeVal = d['Fund Type'] ?? d['Type'] ?? d.fund_type ?? d.type
-                                const amountRaw = d['Amount'] ?? d.amount
-                                const amountVal = typeof amountRaw === 'string' ? amountRaw : formatCurrency(amountRaw)
+                                const isSubscriptionEvent = log.event_type?.includes('subscription') || log.event_type?.includes('free_trial')
+                                const isBeneficiaryAssignment = log.event_type === 'beneficiary_assigned'
                                 const output = []
-                                if (typeVal !== undefined) {
-                                  output.push(
-                                    <div key="req-type" className="text-xs">
-                                      <span className="font-medium">Request Type:</span> {String(typeVal)}
-                                    </div>
-                                  )
+                                
+                                if (isSubscriptionEvent) {
+                                  // Subscription event details
+                                  const planName = d.plan_name || d.new_plan_name
+                                  const amountRaw = d.amount
+                                  const amountVal = typeof amountRaw === 'string' ? amountRaw : formatCurrency(amountRaw)
+                                  const paymentMethod = d.payment_method
+                                  
+                                  if (planName) {
+                                    output.push(
+                                      <div key="plan-name" className="text-xs">
+                                        <span className="font-medium">Plan:</span> {String(planName)}
+                                      </div>
+                                    )
+                                  }
+                                  if (amountRaw !== undefined) {
+                                    output.push(
+                                      <div key="amount" className="text-xs">
+                                        <span className="font-medium">Amount:</span> {amountVal}
+                                      </div>
+                                    )
+                                  }
+                                  if (paymentMethod) {
+                                    output.push(
+                                      <div key="payment-method" className="text-xs">
+                                        <span className="font-medium">Payment:</span> {String(paymentMethod)}
+                                      </div>
+                                    )
+                                  }
+                                } else if (isBeneficiaryAssignment) {
+                                  // Beneficiary assignment event details
+                                  if (d.beneficiary_name) {
+                                    output.push(
+                                      <div key="beneficiary" className="text-xs">
+                                        <span className="font-medium">Beneficiary:</span> {String(d.beneficiary_name)}
+                                      </div>
+                                    )
+                                  }
+                                  if (d.assigned_by) {
+                                    output.push(
+                                      <div key="assigned-by" className="text-xs">
+                                        <span className="font-medium">Assigned By:</span> {String(d.assigned_by)}
+                                      </div>
+                                    )
+                                  }
+                                } else {
+                                  // Regular event details (fund requests, etc.)
+                                  const typeVal = d['Fund Type'] ?? d['Type'] ?? d.fund_type ?? d.type
+                                  const amountRaw = d['Amount'] ?? d.amount
+                                  const amountVal = typeof amountRaw === 'string' ? amountRaw : formatCurrency(amountRaw)
+                                  
+                                  if (typeVal !== undefined) {
+                                    output.push(
+                                      <div key="req-type" className="text-xs">
+                                        <span className="font-medium">Request Type:</span> {String(typeVal)}
+                                      </div>
+                                    )
+                                  }
+                                  if (amountRaw !== undefined) {
+                                    output.push(
+                                      <div key="req-amount" className="text-xs">
+                                        <span className="font-medium">Request Amount:</span> {amountVal}
+                                      </div>
+                                    )
+                                  }
                                 }
-                                if (amountRaw !== undefined) {
-                                  output.push(
-                                    <div key="req-amount" className="text-xs">
-                                      <span className="font-medium">Request Amount:</span> {amountVal}
-                                    </div>
-                                  )
-                                }
+                                
                                 if (output.length === 0) {
                                   return Object.entries(d)
                                     .filter(([key]) => !['Year','Month','year','month'].includes(key))

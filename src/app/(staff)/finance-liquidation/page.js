@@ -700,16 +700,26 @@ const FinanceLiquidationPage = () => {
                       </div>
                     </div>
                     
-                    {receipt.receipt_image_path && (
-                      <div className="mt-3">
+                    {/* View Receipt Button */}
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      {(receipt.receipt_image_path || receipt.file_path || receipt.image) ? (
                         <button
-                          onClick={() => window.open(`/api/liquidations/${selectedReceiptLiquidation.id}/receipts/${receipt.id}/view`, '_blank')}
-                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                          onClick={() => {
+                            const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+                            const viewUrl = `${backend}/api/liquidations/${selectedReceiptLiquidation.id}/receipts/${receipt.id}/view`
+                            window.open(viewUrl, '_blank')
+                          }}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                         >
-                          📷 View Receipt Image
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          View Receipt
                         </button>
-                      </div>
-                    )}
+                      ) : (
+                        <span className="text-sm text-gray-400">No receipt file available</span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

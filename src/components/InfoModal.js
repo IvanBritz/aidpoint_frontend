@@ -1,3 +1,4 @@
+'use client'
 import { Fragment } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
@@ -73,4 +74,3 @@ const InfoModal = ({ isOpen, onClose, title = 'Information', children }) => {
 }
 
 export default InfoModal
-'use client'

@@ -821,39 +821,30 @@ const DirectorLiquidationPage = () => {
                       </div>
                     </div>
                     
-                    {/* Receipt Image Section */}
+                    {/* View Receipt Button */}
                     <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                       <h5 className="font-semibold text-purple-800 mb-3 flex items-center">
-                        <span className="mr-2">📷</span> Receipt Image
+                        <span className="mr-2">📄</span> Receipt Document
                       </h5>
-                      <div className="space-y-4">
-                        {/* Display the actual receipt image using the new component */}
-                        <ReceiptImage 
-                          liquidationId={selectedReceiptLiquidation.id}
-                          receiptId={receipt.id}
-                          receipt={receipt}
-                          index={index}
-                        />
-                        
-                        {/* Action buttons - only show if we have a file_path */}
-                        {receipt.file_path && (
-                          <div className="flex justify-center">
-                            <button
-                              onClick={async () => {
-                                const signedUrl = await fetchSignedUrl(selectedReceiptLiquidation.id, receipt.id)
-                                if (signedUrl) {
-                                  window.open(signedUrl, '_blank')
-                                } else {
-                                  showError('Image Error', 'Could not open receipt image')
-                                }
-                              }}
-                              className="px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center"
-                            >
-                              <span className="mr-2">🔍</span> Open Full Size
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      {receipt.file_path ? (
+                        <button
+                          onClick={() => {
+                            const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+                            const viewUrl = `${backend}/api/liquidations/${selectedReceiptLiquidation.id}/receipts/${receipt.id}/view`
+                            window.open(viewUrl, '_blank')
+                          }}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          View Receipt
+                        </button>
+                      ) : (
+                        <div className="text-center py-4 text-gray-500 text-sm">
+                          No receipt file available
+                        </div>
+                      )}
                     </div>
                     </div>
                   )
