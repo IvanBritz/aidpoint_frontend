@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
@@ -29,6 +29,118 @@ const CompletedLiquidationsPage = () => {
   const [selectedLiquidation, setSelectedLiquidation] = useState(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [showReceiptsModal, setShowReceiptsModal] = useState(false)
+  
+  // Preview modal state
+  const [previewModal, setPreviewModal] = useState({ open: false, fileUrl: null, fileName: null, fileType: null, previewUrl: null })
+  const [previewKey, setPreviewKey] = useState(0)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewBlobUrlRef = useRef(null)
+
+  // Close full preview modal
+  const closeFullPreview = useCallback(() => {
+    // Cleanup blob URL
+    if (previewBlobUrlRef.current) {
+      window.URL.revokeObjectURL(previewBlobUrlRef.current)
+      previewBlobUrlRef.current = null
+    }
+    setPreviewModal({ open: false, fileUrl: null, fileName: null, fileType: null, previewUrl: null })
+  }, [])
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (previewBlobUrlRef.current) {
+        window.URL.revokeObjectURL(previewBlobUrlRef.current)
+        previewBlobUrlRef.current = null
+      }
+    }
+  }, [])
+  
+  // Helper function to check if file is an image
+  const isImageFile = (url) => {
+    if (!url) return false
+    const extension = url.split('.').pop()?.toLowerCase().split('?')[0]
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension)
+  }
+  
+  // Helper function to check if file is a PDF
+  const isPdfFile = (url) => {
+    if (!url) return false
+    const extension = url.split('.').pop()?.toLowerCase().split('?')[0]
+    return extension === 'pdf'
+  }
+  
+  // Open full preview modal
+  const openReceiptPreview = async (receipt, liquidationId) => {
+    const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+    const viewUrl = `${backend}/api/liquidations/${liquidationId}/receipts/${receipt.id}/view`
+    
+    setPreviewKey(prev => prev + 1)
+    setPreviewLoading(true)
+    
+    // Try to detect file type from receipt data
+    let initialFileType = null
+    if (receipt.file_path) {
+      initialFileType = isImageFile(receipt.file_path) ? 'image' : isPdfFile(receipt.file_path) ? 'pdf' : null
+    } else if (receipt.mime_type) {
+      if (receipt.mime_type.startsWith('image/')) {
+        initialFileType = 'image'
+      } else if (receipt.mime_type === 'application/pdf' || receipt.mime_type.includes('pdf')) {
+        initialFileType = 'pdf'
+      }
+    }
+    
+    const fileName = receipt.original_filename || receipt.filename || receipt.file_path?.split('/').pop() || 'Receipt'
+    
+    setPreviewModal({ open: true, fileUrl: viewUrl, fileName, fileType: initialFileType, previewUrl: null })
+    
+    try {
+      // Fetch as blob for server URLs
+      const response = await axios.get(viewUrl, {
+        responseType: 'blob',
+        headers: { 'Accept': '*/*' },
+        timeout: 30000,
+      })
+      
+      const contentType = response.headers['content-type'] || ''
+      
+      // Determine file type from Content-Type header
+      let detectedFileType = initialFileType
+      if (!detectedFileType) {
+        if (contentType.includes('image/')) {
+          detectedFileType = 'image'
+        } else if (contentType.includes('pdf') || contentType.includes('application/pdf')) {
+          detectedFileType = 'pdf'
+        } else {
+          // Default to PDF if content type is not clear (most receipts are PDFs)
+          detectedFileType = 'pdf'
+        }
+      }
+      
+      const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: contentType })
+      
+      const blobUrl = window.URL.createObjectURL(blob)
+      
+      // Cleanup previous blob URL
+      if (previewBlobUrlRef.current) {
+        window.URL.revokeObjectURL(previewBlobUrlRef.current)
+      }
+      previewBlobUrlRef.current = blobUrl
+      
+      setPreviewModal(prev => ({ ...prev, previewUrl: blobUrl, fileType: detectedFileType || 'pdf' }))
+    } catch (err) {
+      console.error('Failed to load receipt preview:', err)
+      // Fallback: try to use direct URL if it's an image
+      if (initialFileType === 'image') {
+        setPreviewModal(prev => ({ ...prev, previewUrl: viewUrl }))
+      } else {
+        // Still show modal but with error state
+        setPreviewModal(prev => ({ ...prev, previewUrl: null }))
+      }
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
 
   // Check user permissions
   useEffect(() => {
@@ -122,32 +234,40 @@ const CompletedLiquidationsPage = () => {
     })
   }
 
-  // Download liquidation summary
-  const downloadSummary = async (liquidationId) => {
+  // Preview liquidation summary
+  const previewSummary = async (liquidationId) => {
+    setPreviewKey(prev => prev + 1)
+    setPreviewLoading(true)
+    
+    const fileName = `Liquidation_Summary_${liquidationId}.pdf`
+    
+    setPreviewModal({ open: true, fileUrl: null, fileName, fileType: 'pdf', previewUrl: null })
+    
     try {
       const response = await axios({
         url: `/api/liquidations/${liquidationId}/download-summary`,
         method: 'GET',
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: 30000,
       })
       
-      const blob = response.data
-      const downloadUrl = window.URL.createObjectURL(blob)
+      const contentType = response.headers['content-type'] || 'application/pdf'
+      const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: contentType })
       
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = `Liquidation_Summary_${liquidationId}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      const blobUrl = window.URL.createObjectURL(blob)
       
-      window.URL.revokeObjectURL(downloadUrl)
+      // Cleanup previous blob URL
+      if (previewBlobUrlRef.current) {
+        window.URL.revokeObjectURL(previewBlobUrlRef.current)
+      }
+      previewBlobUrlRef.current = blobUrl
       
-      console.log('Summary download completed successfully')
-      
-    } catch (error) {
-      console.error('Error downloading summary:', error)
-      alert(`Error downloading summary: ${error.response?.data?.message || error.message}. Please try again or contact support.`)
+      setPreviewModal(prev => ({ ...prev, previewUrl: blobUrl, fileType: 'pdf' }))
+    } catch (err) {
+      console.error('Failed to load summary preview:', err)
+      setPreviewModal(prev => ({ ...prev, previewUrl: null }))
+    } finally {
+      setPreviewLoading(false)
     }
   }
 
@@ -484,12 +604,13 @@ const CompletedLiquidationsPage = () => {
                               </button>
                             )}
                             <button
-                              onClick={() => downloadSummary(liquidation.id)}
+                              onClick={() => previewSummary(liquidation.id)}
                               className="text-green-600 hover:text-green-900 flex items-center"
-                              title="Download Liquidation Summary PDF"
+                              title="Preview Liquidation Summary PDF"
                             >
                               <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               </svg>
                               Summary
                             </button>
@@ -662,6 +783,7 @@ const CompletedLiquidationsPage = () => {
                   onClick={() => {
                     setShowReceiptsModal(false)
                     setSelectedLiquidation(null)
+                    closeFullPreview() // Close preview modal if open
                   }}
                   className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
                 >
@@ -736,55 +858,14 @@ const CompletedLiquidationsPage = () => {
                         <div className="border-t pt-4">
                           <div className="flex items-center">
                             <button
-                              onClick={async () => {
-                                try {
-                                  // Download file
-                                  const url = `/api/liquidations/${selectedLiquidation.id}/receipts/${receipt.id}/download`
-                                  console.log('Downloading receipt:', url)
-                                  
-                                  // Use axios for better authentication handling
-                                  const response = await axios({
-                                    url: url,
-                                    method: 'GET',
-                                    responseType: 'blob', // Important for file downloads
-                                  })
-                                  
-                                  // Get the blob from response
-                                  const blob = response.data
-                                  const downloadUrl = window.URL.createObjectURL(blob)
-                                  
-                                  const link = document.createElement('a')
-                                  link.href = downloadUrl
-                                  link.download = receipt.filename || receipt.original_filename || `receipt-${receipt.id}`
-                                  document.body.appendChild(link)
-                                  link.click()
-                                  document.body.removeChild(link)
-                                  
-                                  // Clean up the object URL
-                                  window.URL.revokeObjectURL(downloadUrl)
-                                  
-                                  console.log('Download completed successfully')
-                                  
-                                } catch (error) {
-                                  console.error('Error downloading file:', error)
-                                  alert(`Error downloading file: ${error.message}. Please try again or contact support.`)
-                                  
-                                  // Log debug information
-                                  console.log('Debug info:', {
-                                    receiptId: receipt.id,
-                                    liquidationId: selectedLiquidation.id,
-                                    filename: receipt.filename || receipt.original_filename,
-                                    hasImage: hasImage,
-                                    filePath: receipt.file_path
-                                  })
-                                }
-                              }}
+                              onClick={() => openReceiptPreview(receipt, selectedLiquidation.id)}
                               className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center text-sm"
                             >
                               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               </svg>
-                              Download File
+                              Preview Receipt
                             </button>
                           </div>
                         </div>
@@ -812,12 +893,97 @@ const CompletedLiquidationsPage = () => {
                   onClick={() => {
                     setShowReceiptsModal(false)
                     setSelectedLiquidation(null)
+                    closeFullPreview() // Close preview modal if open
                   }}
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
                 >
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Preview Modal */}
+      {previewModal.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4" key={`preview-modal-${previewKey}`}>
+          <div
+            className="absolute inset-0 bg-gray-900/60"
+            onClick={closeFullPreview}
+          />
+          <div className="relative bg-white w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] rounded-lg shadow-xl flex flex-col">
+            <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {previewModal.fileName || 'Receipt Preview'}
+              </h3>
+              <button
+                type="button"
+                onClick={closeFullPreview}
+                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6 bg-gray-100 min-h-0" key={`preview-content-${previewKey}`}>
+              {previewLoading ? (
+                <div className="flex items-center justify-center min-h-full">
+                  <div className="text-center text-gray-400">
+                    <svg className="animate-spin h-12 w-12 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p className="text-sm">Loading preview...</p>
+                  </div>
+                </div>
+              ) : previewModal.previewUrl && previewModal.fileType === 'image' ? (
+                <div className="flex items-center justify-center h-full w-full">
+                  <img
+                    key={`preview-img-${previewKey}`}
+                    src={previewModal.previewUrl}
+                    alt={previewModal.fileName || 'Receipt Preview'}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg bg-white"
+                    style={{ maxHeight: 'calc(90vh - 180px)' }}
+                    onError={() => {
+                      // If image fails, try as PDF
+                      setPreviewModal(prev => ({ ...prev, fileType: 'pdf' }))
+                    }}
+                  />
+                </div>
+              ) : previewModal.previewUrl && previewModal.fileType === 'pdf' ? (
+                <div className="flex items-center justify-center h-full w-full">
+                  <iframe
+                    key={`preview-iframe-${previewKey}`}
+                    src={previewModal.previewUrl}
+                    className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
+                    style={{ minHeight: 'calc(90vh - 180px)', width: '100%' }}
+                    title={`PDF Preview - ${previewModal.fileName || 'Receipt'}`}
+                  />
+                </div>
+              ) : previewModal.previewUrl ? (
+                // If we have a URL but no file type detected, default to PDF (most receipts are PDFs)
+                <div className="flex items-center justify-center h-full w-full">
+                  <iframe
+                    key={`preview-iframe-${previewKey}`}
+                    src={previewModal.previewUrl}
+                    className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
+                    style={{ minHeight: 'calc(90vh - 180px)', width: '100%' }}
+                    title={`PDF Preview - ${previewModal.fileName || 'Receipt'}`}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center min-h-full">
+                  <div className="text-center text-gray-400">
+                    <svg className="mx-auto h-12 w-12 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-sm">Preview not available</p>
+                    <p className="text-xs mt-2 text-gray-500">{previewModal.fileName}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

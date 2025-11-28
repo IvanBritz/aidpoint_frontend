@@ -1,15 +1,212 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from '@/lib/axios'
+
+// File Preview Card Component for server URLs
+const FilePreviewCard = ({ filePath, fileName, documentType, onViewFullPreview }) => {
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [fileType, setFileType] = useState(null)
+  const blobUrlRef = useRef(null)
+  
+  const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+  const docUrl = filePath ? `${backend}/api/documents/${filePath}` : null
+  
+  useEffect(() => {
+    // Cleanup previous blob URL if exists
+    if (blobUrlRef.current) {
+      window.URL.revokeObjectURL(blobUrlRef.current)
+      blobUrlRef.current = null
+    }
+    
+    if (!filePath) {
+      setLoading(false)
+      setPreviewUrl(null)
+      setFileType(null)
+      return
+    }
+    
+    // Determine file type from path
+    const extension = filePath.split('.').pop()?.toLowerCase()
+    
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension)) {
+      setFileType('image')
+      // For images, use direct URL
+      setPreviewUrl(docUrl)
+      setLoading(false)
+      setError(false)
+    } else if (extension === 'pdf') {
+      setFileType('pdf')
+      
+      // For PDFs, fetch as blob to handle authentication properly
+      setLoading(true)
+      setError(false)
+      
+      axios.get(`/api/documents/${filePath}`, {
+        responseType: 'blob',
+        headers: { 'Accept': 'application/pdf' },
+        timeout: 30000,
+      })
+      .then(response => {
+        const contentType = response.headers['content-type'] || 'application/pdf'
+        const blob = response.data instanceof Blob
+          ? response.data
+          : new Blob([response.data], { type: contentType })
+        
+        const blobUrl = window.URL.createObjectURL(blob)
+        blobUrlRef.current = blobUrl
+        setPreviewUrl(blobUrl)
+        setLoading(false)
+        setError(false)
+      })
+      .catch(err => {
+        console.error('Failed to load PDF:', err)
+        setError(true)
+        setLoading(false)
+      })
+    } else {
+      setFileType(null)
+      setLoading(false)
+    }
+    
+    // Cleanup function for blob URLs
+    return () => {
+      if (blobUrlRef.current) {
+        window.URL.revokeObjectURL(blobUrlRef.current)
+        blobUrlRef.current = null
+      }
+    }
+  }, [filePath, docUrl])
+  
+  const isImage = fileType === 'image'
+  const isPdf = fileType === 'pdf'
+  
+  // Render - all hooks must be called before any conditional returns
+  if (!filePath) {
+    return (
+      <div className="w-full h-40 bg-gray-50 flex items-center justify-center border border-gray-200 rounded">
+        <div className="text-center text-gray-400">
+          <svg className="mx-auto h-8 w-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <p className="text-xs">No file</p>
+        </div>
+      </div>
+    )
+  }
+  
+  if (error || (!isImage && !isPdf)) {
+    return (
+      <div className="w-full h-40 bg-gray-50 flex items-center justify-center border border-gray-200 rounded">
+        <div className="text-center text-gray-400">
+          <svg className="mx-auto h-8 w-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <p className="text-xs">Preview not available</p>
+          <p className="text-xs mt-1 text-gray-500 truncate px-2">{fileName}</p>
+        </div>
+      </div>
+    )
+  }
+  
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      {isImage && previewUrl ? (
+        <div className="w-full h-48 bg-white flex items-center justify-center overflow-hidden">
+          <img
+            src={previewUrl}
+            alt={fileName || 'Preview'}
+            className="max-w-full max-h-full object-contain"
+            style={{ maxHeight: '192px' }}
+            onError={() => setError(true)}
+            onLoad={() => setError(false)}
+          />
+        </div>
+      ) : isPdf && previewUrl && !loading ? (
+        <div className="w-full h-48 bg-white overflow-hidden relative">
+          <iframe
+            key={previewUrl}
+            src={previewUrl}
+            type="application/pdf"
+            className="w-full h-full border-0"
+            title={`PDF Preview - ${fileName || 'PDF'}`}
+            style={{ minHeight: '192px', width: '100%' }}
+          />
+        </div>
+      ) : loading ? (
+        <div className="w-full h-48 bg-gray-50 flex items-center justify-center">
+          <div className="text-center text-gray-400">
+            <svg className="animate-spin h-8 w-8 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p className="text-xs">Loading...</p>
+          </div>
+        </div>
+      ) : (
+        <div className="w-full h-48 bg-gray-50 flex items-center justify-center">
+          <div className="text-center text-gray-400">
+            <svg className="mx-auto h-8 w-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p className="text-xs">Preview not available</p>
+          </div>
+        </div>
+      )}
+      <div className="p-2 bg-gray-50 border-t border-gray-200">
+        <div className="text-xs text-gray-600 truncate">{fileName || documentType}</div>
+        <button
+          type="button"
+          onClick={() => onViewFullPreview?.(filePath, fileName, fileType)}
+          className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline focus:outline-none"
+        >
+          View full preview
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function SubmissionReviewModal({ isOpen, submission, onClose, onReviewed }) {
   const [loading, setLoading] = useState(false)
   const [notes, setNotes] = useState('')
   const [downloadingDoc, setDownloadingDoc] = useState(null)
+  const [previewModal, setPreviewModal] = useState({ open: false, filePath: null, fileName: null, fileType: null, previewUrl: null })
+  const [previewKey, setPreviewKey] = useState(0)
+  const previewBlobUrlRef = useRef(null)
+
+  // Close full preview modal
+  const closeFullPreview = useCallback(() => {
+    // Cleanup blob URL
+    if (previewBlobUrlRef.current) {
+      window.URL.revokeObjectURL(previewBlobUrlRef.current)
+      previewBlobUrlRef.current = null
+    }
+    setPreviewModal({ open: false, filePath: null, fileName: null, fileType: null, previewUrl: null })
+  }, [])
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup preview modal blob URL when component unmounts
+      if (previewBlobUrlRef.current) {
+        window.URL.revokeObjectURL(previewBlobUrlRef.current)
+        previewBlobUrlRef.current = null
+      }
+    }
+  }, [])
+  
+  // Close preview modal when main modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      closeFullPreview()
+    }
+  }, [isOpen, closeFullPreview])
 
   if (!isOpen || !submission) return null
 
   const beneficiaryName = `${submission?.beneficiary?.firstname || ''} ${submission?.beneficiary?.middlename || ''} ${submission?.beneficiary?.lastname || ''}`.replace(/\s+/g,' ').trim()
-
+  
   const act = async (status) => {
     try {
       setLoading(true)
@@ -25,6 +222,64 @@ export default function SubmissionReviewModal({ isOpen, submission, onClose, onR
 
   const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
   const docUrl = (p) => `${backend}/api/documents/${p}`
+  
+  // Open full preview modal
+  const openFullPreview = async (filePath, fileName, fileType) => {
+    if (!filePath) return
+    
+    setPreviewKey(prev => prev + 1)
+    setPreviewModal({ open: true, filePath, fileName, fileType, previewUrl: null })
+    
+    // Fetch file as blob for preview
+    try {
+      const response = await axios.get(`/api/documents/${filePath}`, {
+        responseType: 'blob',
+        headers: { 'Accept': '*/*' },
+        timeout: 30000,
+      })
+      
+      const contentType = response.headers['content-type'] || ''
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: contentType || 'application/octet-stream' })
+      
+      const blobUrl = window.URL.createObjectURL(blob)
+      
+      // Cleanup previous blob URL
+      if (previewBlobUrlRef.current) {
+        window.URL.revokeObjectURL(previewBlobUrlRef.current)
+      }
+      previewBlobUrlRef.current = blobUrl
+      
+      setPreviewModal(prev => ({ ...prev, previewUrl: blobUrl }))
+    } catch (error) {
+      console.error('Failed to load file for preview:', error)
+      alert('Failed to load file preview. Please try again.')
+      closeFullPreview()
+    }
+  }
+  
+  // Helper function to check if file is an image
+  const isImageFile = (type) => {
+    return type === 'image'
+  }
+  
+  // Helper function to check if file is a PDF
+  const isPdfFile = (type) => {
+    return type === 'pdf'
+  }
+  
+  // Download file from preview modal
+  const downloadPreviewFile = () => {
+    if (!previewModal.previewUrl) return
+    
+    const link = document.createElement('a')
+    link.href = previewModal.previewUrl
+    link.download = previewModal.fileName || 'document'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
   
   // Open a beneficiary document in a new browser tab for review.
   // We still fetch via Axios to keep the existing auth headers/CSRF setup,
@@ -77,15 +332,15 @@ export default function SubmissionReviewModal({ isOpen, submission, onClose, onR
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-gray-900/40" onClick={()=>!loading && onClose?.()}></div>
-      <div className="relative bg-white w-full max-w-2xl rounded-lg shadow-xl">
-        <div className="px-6 py-4 border-b">
+      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-lg shadow-xl flex flex-col">
+        <div className="px-6 py-4 border-b flex-shrink-0">
           <h3 className="text-lg font-semibold text-gray-900">Review Submission</h3>
           <p className="text-sm text-gray-600">Beneficiary: <span className="font-medium">{beneficiaryName || 'Unknown'}</span></p>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <div className="text-gray-600">Enrollment Date</div>
@@ -99,70 +354,41 @@ export default function SubmissionReviewModal({ isOpen, submission, onClose, onR
               <div className="text-gray-600">Scholar Status</div>
               <div className="font-medium">{submission.is_scholar ? 'Scholar' : 'Non-scholar'}</div>
             </div>
+          </div>
+          
+          {/* File Preview Cards Section */}
+          <div className="space-y-4 mt-4">
             {submission.enrollment_certification_path && (
               <div>
-                <div className="text-gray-600">Enrollment Certification</div>
-                <button 
-                  className="text-blue-600 underline hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={() => downloadDocument(submission.enrollment_certification_path, `${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_Enrollment_Certification`)}
-                  disabled={downloadingDoc === `${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_Enrollment_Certification`}
-                >
-                  {downloadingDoc === `${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_Enrollment_Certification` ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-Opening...
-                    </span>
-                  ) : (
-'Open file'
-                  )}
-                </button>
+                <div className="text-gray-600 mb-2 text-sm font-medium">Enrollment Certification</div>
+                <FilePreviewCard
+                  filePath={submission.enrollment_certification_path}
+                  fileName={`${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_Enrollment_Certification`}
+                  documentType="Enrollment Certification"
+                  onViewFullPreview={openFullPreview}
+                />
               </div>
             )}
             {submission.scholarship_certification_path && (
               <div>
-                <div className="text-gray-600">Scholarship Certification</div>
-                <button 
-                  className="text-blue-600 underline hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={() => downloadDocument(submission.scholarship_certification_path, `${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_Scholarship_Certification`)}
-                  disabled={downloadingDoc === `${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_Scholarship_Certification`}
-                >
-                  {downloadingDoc === `${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_Scholarship_Certification` ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Opening...
-                    </span>
-                  ) : (
-                    'Open file'
-                  )}
-                </button>
+                <div className="text-gray-600 mb-2 text-sm font-medium">Scholarship Certification</div>
+                <FilePreviewCard
+                  filePath={submission.scholarship_certification_path}
+                  fileName={`${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_Scholarship_Certification`}
+                  documentType="Scholarship Certification"
+                  onViewFullPreview={openFullPreview}
+                />
               </div>
             )}
             {submission.sao_photo_path && (
               <div>
-                <div className="text-gray-600">SOA</div>
-                <button 
-                  className="text-blue-600 underline hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={() => downloadDocument(submission.sao_photo_path, `${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_SOA`)}
-                  disabled={downloadingDoc === `${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_SOA`}
-                >
-                  {downloadingDoc === `${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_SOA` ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Opening...
-                    </span>
-                  ) : (
-                    'Open file'
-                  )}
-                </button>
+                <div className="text-gray-600 mb-2 text-sm font-medium">SOA</div>
+                <FilePreviewCard
+                  filePath={submission.sao_photo_path}
+                  fileName={`${submission.beneficiary?.lastname || 'Unknown'}_${submission.beneficiary?.firstname || 'Beneficiary'}_SOA`}
+                  documentType="SOA"
+                  onViewFullPreview={openFullPreview}
+                />
               </div>
             )}
           </div>
@@ -179,7 +405,7 @@ Opening...
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t flex items-center justify-between">
+        <div className="px-6 py-4 border-t flex items-center justify-between flex-shrink-0">
           <button
             onClick={onClose}
             disabled={loading}
@@ -205,6 +431,79 @@ Opening...
           </div>
         </div>
       </div>
+      
+      {/* Full Preview Modal */}
+      {previewModal.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4" key={`preview-modal-${previewKey}`}>
+          <div
+            className="absolute inset-0 bg-gray-900/60"
+            onClick={closeFullPreview}
+          />
+          <div className="relative bg-white w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] rounded-lg shadow-xl flex flex-col">
+            <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {previewModal.fileName || 'File Preview'}
+              </h3>
+              <div className="flex items-center gap-3">
+                {(isImageFile(previewModal.fileType) || isPdfFile(previewModal.fileType)) && previewModal.previewUrl && (
+                  <button
+                    type="button"
+                    onClick={downloadPreviewFile}
+                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={closeFullPreview}
+                  className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-6 bg-gray-100 min-h-0" key={`preview-content-${previewKey}`}>
+              {previewModal.previewUrl && isImageFile(previewModal.fileType) ? (
+                <div className="flex items-center justify-center h-full w-full">
+                  <img
+                    key={`preview-img-${previewKey}`}
+                    src={previewModal.previewUrl}
+                    alt={previewModal.fileName || 'Preview'}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg bg-white"
+                    style={{ maxHeight: 'calc(90vh - 180px)' }}
+                  />
+                </div>
+              ) : previewModal.previewUrl && isPdfFile(previewModal.fileType) ? (
+                <div className="flex items-center justify-center h-full w-full">
+                  <iframe
+                    key={`preview-iframe-${previewKey}`}
+                    src={previewModal.previewUrl}
+                    className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
+                    style={{ minHeight: 'calc(90vh - 180px)', width: '100%' }}
+                    title={`PDF Preview - ${previewModal.fileName || 'PDF'}`}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center min-h-full">
+                  <div className="text-center text-gray-400">
+                    <svg className="animate-spin h-12 w-12 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p className="text-sm">Loading preview...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

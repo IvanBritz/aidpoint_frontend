@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/hooks/auth'
 import axios from '@/lib/axios'
 import Header from '@/components/Header'
@@ -16,6 +16,9 @@ const ApprovedSubmissions = () => {
     const [toast, setToast] = useState({ open: false, type: 'success', title: '', message: '' })
     const [viewingSubmission, setViewingSubmission] = useState(null)
     const [downloadingDoc, setDownloadingDoc] = useState(null)
+    const [previewModal, setPreviewModal] = useState({ open: false, filePath: null, fileName: null, fileType: null, previewUrl: null })
+    const [previewKey, setPreviewKey] = useState(0)
+    const previewBlobUrlRef = useRef(null)
 
     useEffect(() => {
         if (user) {
@@ -63,29 +66,99 @@ const ApprovedSubmissions = () => {
         })
     }
 
+    // Close full preview modal
+    const closeFullPreview = useCallback(() => {
+        // Cleanup blob URL
+        if (previewBlobUrlRef.current) {
+            window.URL.revokeObjectURL(previewBlobUrlRef.current)
+            previewBlobUrlRef.current = null
+        }
+        setPreviewModal({ open: false, filePath: null, fileName: null, fileType: null, previewUrl: null })
+    }, [])
+    
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (previewBlobUrlRef.current) {
+                window.URL.revokeObjectURL(previewBlobUrlRef.current)
+                previewBlobUrlRef.current = null
+            }
+        }
+    }, [])
+    
+    // Close preview modal when viewing submission modal closes
+    useEffect(() => {
+        if (!viewingSubmission) {
+            closeFullPreview()
+        }
+    }, [viewingSubmission, closeFullPreview])
+    
+    // Helper function to check if file is an image
+    const isImageFile = (path) => {
+        if (!path) return false
+        const extension = path.split('.').pop()?.toLowerCase()
+        return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension)
+    }
+    
+    // Helper function to check if file is a PDF
+    const isPdfFile = (path) => {
+        if (!path) return false
+        const extension = path.split('.').pop()?.toLowerCase()
+        return extension === 'pdf'
+    }
+    
+    // Open full preview modal
     const openDocument = async (path, documentType) => {
         if (!path) return
         if (downloadingDoc === documentType) return
+        
         setDownloadingDoc(documentType)
+        setPreviewKey(prev => prev + 1)
+        
+        // Determine file type
+        const fileType = isImageFile(path) ? 'image' : isPdfFile(path) ? 'pdf' : null
+        const fileName = path.split('/').pop() || documentType
+        
+        setPreviewModal({ open: true, filePath: path, fileName, fileType, previewUrl: null })
+        
         try {
             const response = await axios.get(`/api/documents/${path}`, {
                 responseType: 'blob',
                 headers: { 'Accept': '*/*' },
                 timeout: 30000,
             })
+            
             const contentType = response.headers['content-type'] || 'application/octet-stream'
             const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: contentType })
-            const url = window.URL.createObjectURL(blob)
-            window.open(url, '_blank')
-            // Clean up the URL after a short delay to allow the browser to open it
-            setTimeout(() => window.URL.revokeObjectURL(url), 100)
+            
+            const blobUrl = window.URL.createObjectURL(blob)
+            
+            // Cleanup previous blob URL
+            if (previewBlobUrlRef.current) {
+                window.URL.revokeObjectURL(previewBlobUrlRef.current)
+            }
+            previewBlobUrlRef.current = blobUrl
+            
+            setPreviewModal(prev => ({ ...prev, previewUrl: blobUrl }))
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.error('Failed to open document', err)
             showToast('error', 'Failed to open document', 'Could not open the document. Please try again.')
+            closeFullPreview()
         } finally {
             setDownloadingDoc(null)
         }
+    }
+    
+    // Download file from preview modal
+    const downloadPreviewFile = () => {
+        if (!previewModal.previewUrl) return
+        
+        const link = document.createElement('a')
+        link.href = previewModal.previewUrl
+        link.download = previewModal.fileName || 'document'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
     }
 
     const handlePageChange = (page) => {
@@ -251,7 +324,7 @@ const ApprovedSubmissions = () => {
 
                     {/* Details Modal */}
                     {viewingSubmission && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                             <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
                                 <div className="px-6 py-4 border-b border-gray-200">
                                     <div className="flex items-center justify-between">
@@ -371,6 +444,79 @@ const ApprovedSubmissions = () => {
                                     >
                                         Close
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* Full Preview Modal */}
+                    {previewModal.open && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4" key={`preview-modal-${previewKey}`}>
+                            <div
+                                className="absolute inset-0 bg-gray-900/60"
+                                onClick={closeFullPreview}
+                            />
+                            <div className="relative bg-white w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] rounded-lg shadow-xl flex flex-col">
+                                <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
+                                    <h3 className="text-lg font-semibold text-gray-900">
+                                        {previewModal.fileName || 'File Preview'}
+                                    </h3>
+                                    <div className="flex items-center gap-3">
+                                        {(isImageFile(previewModal.filePath) || isPdfFile(previewModal.filePath)) && previewModal.previewUrl && (
+                                            <button
+                                                type="button"
+                                                onClick={downloadPreviewFile}
+                                                className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                </svg>
+                                                Download
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={closeFullPreview}
+                                            className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                                        >
+                                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex-1 overflow-auto p-6 bg-gray-100 min-h-0" key={`preview-content-${previewKey}`}>
+                                    {previewModal.previewUrl && isImageFile(previewModal.filePath) ? (
+                                        <div className="flex items-center justify-center h-full w-full">
+                                            <img
+                                                key={`preview-img-${previewKey}`}
+                                                src={previewModal.previewUrl}
+                                                alt={previewModal.fileName || 'Preview'}
+                                                className="max-w-full max-h-full object-contain rounded-lg shadow-lg bg-white"
+                                                style={{ maxHeight: 'calc(90vh - 180px)' }}
+                                            />
+                                        </div>
+                                    ) : previewModal.previewUrl && isPdfFile(previewModal.filePath) ? (
+                                        <div className="flex items-center justify-center h-full w-full">
+                                            <iframe
+                                                key={`preview-iframe-${previewKey}`}
+                                                src={previewModal.previewUrl}
+                                                className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
+                                                style={{ minHeight: 'calc(90vh - 180px)', width: '100%' }}
+                                                title={`PDF Preview - ${previewModal.fileName || 'PDF'}`}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-center min-h-full">
+                                            <div className="text-center text-gray-400">
+                                                <svg className="animate-spin h-12 w-12 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                <p className="text-sm">Loading preview...</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

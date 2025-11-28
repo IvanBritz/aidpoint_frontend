@@ -1,7 +1,191 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import axios from '@/lib/axios'
 import Loading from '@/components/Loading'
 import Toast from '@/components/Toast'
+
+// Image Preview Component for small preview cards
+const ImagePreview = ({ file, url, fileName }) => {
+    const [imageError, setImageError] = useState(false)
+    const [imageUrl, setImageUrl] = useState(null)
+    
+    useEffect(() => {
+        if (!file) {
+            setImageUrl(null)
+            setImageError(false)
+            return
+        }
+        
+        // Always create a fresh blob URL from the file
+        try {
+            const blobUrl = window.URL.createObjectURL(file)
+            setImageUrl(blobUrl)
+            setImageError(false)
+            
+            return () => {
+                // Cleanup on unmount
+                window.URL.revokeObjectURL(blobUrl)
+            }
+        } catch (err) {
+            console.error('Failed to create image preview URL', err)
+            // Fallback to provided URL if blob creation fails
+            if (url) {
+                setImageUrl(url)
+            } else {
+                setImageError(true)
+            }
+        }
+    }, [file, url])
+    
+    if (!file) {
+        return (
+            <div className="w-full h-48 bg-gray-50 flex items-center justify-center border border-gray-200 rounded">
+                <div className="text-center text-gray-400">
+                    <svg className="mx-auto h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-xs">Image Preview</p>
+                </div>
+            </div>
+        )
+    }
+    
+    if (imageError && !imageUrl) {
+        return (
+            <div className="w-full h-48 bg-gray-50 flex items-center justify-center border border-gray-200 rounded">
+                <div className="text-center text-gray-400">
+                    <svg className="mx-auto h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-xs">Image Preview</p>
+                    <p className="text-xs mt-1 text-gray-500 truncate px-2">{fileName}</p>
+                </div>
+            </div>
+        )
+    }
+    
+    if (!imageUrl) {
+        return (
+            <div className="w-full h-48 bg-gray-50 flex items-center justify-center border border-gray-200 rounded">
+                <div className="text-center text-gray-400">
+                    <p className="text-xs">Loading...</p>
+                </div>
+            </div>
+        )
+    }
+    
+    return (
+        <div className="w-full h-48 bg-white flex items-center justify-center overflow-hidden border border-gray-200 rounded">
+            <img
+                key={imageUrl}
+                src={imageUrl}
+                alt={`Preview - ${fileName || 'Image'}`}
+                className="max-w-full max-h-full object-contain"
+                style={{ maxHeight: '192px' }}
+                onError={() => {
+                    setImageError(true)
+                }}
+                onLoad={() => {
+                    setImageError(false)
+                }}
+            />
+        </div>
+    )
+}
+
+// PDF Preview Component for small preview cards
+const PDFPreview = ({ file, url, fileName }) => {
+    const [pdfError, setPdfError] = useState(false)
+    const [pdfUrl, setPdfUrl] = useState(null)
+    const iframeRef = useRef(null)
+    
+    useEffect(() => {
+        if (!file) {
+            setPdfUrl(null)
+            setPdfError(false)
+            return
+        }
+        
+        // Always create a fresh blob URL from the file
+        try {
+            const blobUrl = window.URL.createObjectURL(file)
+            setPdfUrl(blobUrl)
+            setPdfError(false)
+            
+            return () => {
+                // Cleanup on unmount
+                window.URL.revokeObjectURL(blobUrl)
+            }
+        } catch (err) {
+            console.error('Failed to create PDF preview URL', err)
+            // Fallback to provided URL if blob creation fails
+            if (url) {
+                setPdfUrl(url)
+            } else {
+                setPdfError(true)
+            }
+        }
+    }, [file, url])
+    
+    useEffect(() => {
+        if (pdfUrl && iframeRef.current) {
+            // Force reload the iframe when URL changes
+            iframeRef.current.src = pdfUrl
+        }
+    }, [pdfUrl])
+    
+    if (!file) {
+        return (
+            <div className="w-full h-48 bg-gray-50 flex items-center justify-center border border-gray-200 rounded">
+                <div className="text-center text-gray-400">
+                    <svg className="mx-auto h-12 w-12 mb-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-xs">PDF Preview</p>
+                </div>
+            </div>
+        )
+    }
+    
+    if (pdfError && !pdfUrl) {
+        return (
+            <div className="w-full h-48 bg-gray-50 flex items-center justify-center border border-gray-200 rounded">
+                <div className="text-center text-gray-400">
+                    <svg className="mx-auto h-12 w-12 mb-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-xs">PDF Preview</p>
+                    <p className="text-xs mt-1 text-gray-500 truncate px-2">{fileName}</p>
+                </div>
+            </div>
+        )
+    }
+    
+    if (!pdfUrl) {
+        return (
+            <div className="w-full h-48 bg-gray-50 flex items-center justify-center border border-gray-200 rounded">
+                <div className="text-center text-gray-400">
+                    <p className="text-xs">Loading...</p>
+                </div>
+            </div>
+        )
+    }
+    
+    return (
+        <div className="w-full h-48 bg-white overflow-hidden relative border border-gray-200 rounded">
+            <iframe
+                ref={iframeRef}
+                key={pdfUrl}
+                src={pdfUrl}
+                className="w-full h-full border-0"
+                title={`PDF Preview - ${fileName || 'PDF'}`}
+                style={{ minHeight: '192px' }}
+                onError={() => {
+                    setPdfError(true)
+                }}
+            />
+        </div>
+    )
+}
 
 const badgeClasses = status => {
     switch ((status || '').toLowerCase()) {
@@ -37,12 +221,45 @@ export default function EnrollmentVerificationCard({ user }) {
     // Controls the "review before submit" modal so beneficiaries must confirm
     // their details and documents before anything is sent to the backend.
     const [showReview, setShowReview] = useState(false)
+    // Controls the file preview modal
+    const [previewFile, setPreviewFile] = useState(null)
+    const [previewUrl, setPreviewUrl] = useState(null)
+    const [previewKey, setPreviewKey] = useState(0) // Key to force re-render
+    // Store preview URLs for each file to avoid recreating them
+    const [filePreviewUrls, setFilePreviewUrls] = useState({})
+    // Store file input refs for "Choose another file" functionality
+    const fileInputRefs = useRef({
+        enrollment_certification: null,
+        scholarship_certification: null,
+        sao_photo: null,
+    })
     const MAX_FILE_SIZE = 10 * 1024 * 1024
     const handleFilePick = (key, file) => {
-        if (!file) { setForm(f => ({ ...f, [key]: null })); return }
+        if (!file) {
+            // Cleanup preview URL for this key
+            if (filePreviewUrls[key]) {
+                window.URL.revokeObjectURL(filePreviewUrls[key])
+                setFilePreviewUrls(prev => {
+                    const newUrls = { ...prev }
+                    delete newUrls[key]
+                    return newUrls
+                })
+            }
+            setForm(f => ({ ...f, [key]: null }))
+            return
+        }
         if (file.size <= 0) { setErrors('Selected file is empty.'); return }
         if (file.size > MAX_FILE_SIZE) { setErrors('File size must not exceed 10MB.'); return }
         setErrors(null)
+        
+        // Cleanup old preview URL for this key
+        if (filePreviewUrls[key]) {
+            window.URL.revokeObjectURL(filePreviewUrls[key])
+        }
+        
+        // Create new preview URL
+        const url = window.URL.createObjectURL(file)
+        setFilePreviewUrls(prev => ({ ...prev, [key]: url }))
         setForm(f => ({ ...f, [key]: file }))
     }
 
@@ -120,6 +337,169 @@ export default function EnrollmentVerificationCard({ user }) {
             setToast({ open: true, type: 'error', title: 'Preview failed', message: 'Could not open a preview of the file.' })
         }
     }
+
+    // Helper function to check if file is an image
+    const isImageFile = (file) => {
+        if (!file) return false
+        // Check MIME type first
+        if (file.type) {
+            if (file.type.startsWith('image/')) return true
+            // Explicit checks for common image types
+            if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.type.toLowerCase())) return true
+        }
+        // Fallback to file extension
+        return /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.name || '')
+    }
+
+    // Helper function to check if file is a PDF
+    const isPdfFile = (file) => {
+        if (!file) return false
+        // Check MIME type first
+        if (file.type) {
+            if (file.type.toLowerCase() === 'application/pdf') return true
+        }
+        // Fallback to file extension
+        return /\.pdf$/i.test(file.name || '')
+    }
+
+    // Generate preview URL for a file (uses cached URL if available)
+    const getPreviewUrl = (file, key) => {
+        if (!file) return null
+        // If we have a cached URL for this file, use it
+        if (key && filePreviewUrls[key]) {
+            return filePreviewUrls[key]
+        }
+        // Otherwise create a new one (shouldn't happen normally, but fallback)
+        try {
+            return window.URL.createObjectURL(file)
+        } catch (err) {
+            console.error('Failed to create preview URL', err)
+            return null
+        }
+    }
+
+    // Open preview modal
+    const openPreviewModal = (file, key) => {
+        if (!file) {
+            setToast({ open: true, type: 'error', title: 'Preview failed', message: 'No file selected.' })
+            return
+        }
+        
+        // Verify file type is supported
+        const isImage = isImageFile(file)
+        const isPdf = isPdfFile(file)
+        
+        if (!isImage && !isPdf) {
+            setToast({ 
+                open: true, 
+                type: 'error', 
+                title: 'Preview not supported', 
+                message: 'Preview is only available for PDF, PNG, JPEG, and JPG files.' 
+            })
+            return
+        }
+        
+        // Always create a fresh blob URL for the modal to ensure it loads properly
+        // The cached URL is only used for thumbnails
+        let url = null
+        try {
+            url = window.URL.createObjectURL(file)
+            if (!url) {
+                throw new Error('Failed to create blob URL')
+            }
+        } catch (err) {
+            console.error('Failed to create preview URL', err)
+            setToast({ 
+                open: true, 
+                type: 'error', 
+                title: 'Preview failed', 
+                message: 'Could not create a preview of the file. Please try again.' 
+            })
+            return
+        }
+        
+        if (url) {
+            // First clear existing preview to ensure clean state
+            if (previewUrl && previewUrl !== filePreviewUrls[key]) {
+                // Revoke old modal preview URL (but not thumbnail URLs)
+                try {
+                    window.URL.revokeObjectURL(previewUrl)
+                } catch (err) {
+                    console.warn('Failed to revoke old preview URL', err)
+                }
+            }
+            
+            // Increment key to force re-render of modal content
+            setPreviewKey(prev => prev + 1)
+            // Set both file and URL together
+            setPreviewFile(file)
+            setPreviewUrl(url)
+        } else {
+            setToast({ 
+                open: true, 
+                type: 'error', 
+                title: 'Preview failed', 
+                message: 'Could not create a preview of the file. Please try again.' 
+            })
+        }
+    }
+
+    // Close preview modal
+    const closePreviewModal = () => {
+        // Revoke the modal preview URL when closing (thumbnails use separate cached URLs)
+        if (previewUrl) {
+            // Only revoke if it's not a cached thumbnail URL
+            const isThumbnailUrl = Object.values(filePreviewUrls).includes(previewUrl)
+            if (!isThumbnailUrl) {
+                window.URL.revokeObjectURL(previewUrl)
+            }
+        }
+        setPreviewFile(null)
+        setPreviewUrl(null)
+    }
+
+    // Handle "Choose another file" - clears input value and triggers file picker
+    const handleChooseAnotherFile = (key) => {
+        const input = fileInputRefs.current[key]
+        if (input) {
+            // Clear the input value so that selecting the same file will trigger onChange
+            input.value = ''
+            input.click()
+        }
+    }
+
+    // Download the file from preview modal
+    const downloadPreviewFile = () => {
+        if (!previewFile || !previewUrl) return
+        
+        try {
+            const a = document.createElement('a')
+            a.href = previewUrl
+            a.download = previewFile.name || 'download'
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+        } catch (err) {
+            console.error('Download failed', err)
+            setToast({ open: true, type: 'error', title: 'Download failed', message: 'Could not download the file. Please try again.' })
+        }
+    }
+
+    // Cleanup preview URLs on unmount and when files are removed
+    useEffect(() => {
+        return () => {
+            // Cleanup modal preview URL
+            if (previewUrl) {
+                window.URL.revokeObjectURL(previewUrl)
+            }
+            // Cleanup all file preview URLs
+            Object.values(filePreviewUrls).forEach(url => {
+                if (url) {
+                    window.URL.revokeObjectURL(url)
+                }
+            })
+        }
+    }, [previewUrl, filePreviewUrls])
 
     // Open the review dialog when the form is valid instead of immediately
     // sending the payload to the backend. This ensures beneficiaries always
@@ -310,100 +690,193 @@ export default function EnrollmentVerificationCard({ user }) {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Enrollment Certification</label>
-                                    <label
-                                        className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-6 text-center ${form.enrollment_certification ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-300'}`}
-                                    >
-                                        <div>
-                                            <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                                            <div className="mt-2 text-sm text-gray-600">Click to choose file</div>
-                                            {form.enrollment_certification && (
-                                                <div className="mt-1 text-xs text-gray-500 truncate">File selected</div>
-                                            )}
-                                        </div>
-                                        <input
-                                            type="file"
-                                            accept="image/png,image/jpeg,application/pdf"
-                                            className="hidden"
-                                            required={!sub?.enrollment_certification_path}
-                                            onChange={e => handleFilePick('enrollment_certification', e.target.files?.[0] || null)}
-                                        />
-                                    </label>
-                                    {form.enrollment_certification && (
-                                        <button
-                                            type="button"
-                                            onClick={() => openLocalPreview(form.enrollment_certification)}
-                                            className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
-                                        >
-                                            Preview selected file
-                                        </button>
-                                    )}
+                                    <input
+                                        ref={el => fileInputRefs.current.enrollment_certification = el}
+                                        type="file"
+                                        accept="image/png,image/jpeg,application/pdf"
+                                        className="hidden"
+                                        required={!sub?.enrollment_certification_path}
+                                        onChange={e => handleFilePick('enrollment_certification', e.target.files?.[0] || null)}
+                                    />
+                                    <div className={`rounded-lg border-2 border-dashed overflow-hidden ${form.enrollment_certification ? 'border-green-400 bg-green-50' : 'border-gray-300'}`}>
+                                        {form.enrollment_certification ? (
+                                            <div className="p-4">
+                                                {isImageFile(form.enrollment_certification) ? (
+                                                    <div className="mb-3">
+                                                        <ImagePreview 
+                                                            file={form.enrollment_certification}
+                                                            url={getPreviewUrl(form.enrollment_certification, 'enrollment_certification')}
+                                                            fileName={form.enrollment_certification.name}
+                                                        />
+                                                    </div>
+                                                ) : isPdfFile(form.enrollment_certification) ? (
+                                                    <div className="mb-3">
+                                                        <PDFPreview 
+                                                            file={form.enrollment_certification}
+                                                            url={getPreviewUrl(form.enrollment_certification, 'enrollment_certification')}
+                                                            fileName={form.enrollment_certification.name}
+                                                        />
+                                                    </div>
+                                                ) : null}
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openPreviewModal(form.enrollment_certification, 'enrollment_certification')}
+                                                        className="flex-1 px-3 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-600 rounded-md hover:bg-blue-50"
+                                                    >
+                                                        Preview
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleChooseAnotherFile('enrollment_certification')}
+                                                        className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                                                    >
+                                                        Choose another file
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <label 
+                                                className="flex cursor-pointer items-center justify-center p-6 text-center hover:border-blue-300"
+                                                onClick={() => fileInputRefs.current.enrollment_certification?.click()}
+                                            >
+                                                <div>
+                                                    <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                                                    <div className="mt-2 text-sm text-gray-600">Click to choose file</div>
+                                                </div>
+                                            </label>
+                                        )}
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">Scholarship Certification {form.is_scholar === 'scholar' && <span className="text-red-600">(required)</span>}</label>
-                                    <label
-                                        className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-6 text-center ${
-                                            form.is_scholar !== 'scholar'
-                                                ? 'border-gray-200 opacity-50 cursor-not-allowed'
-                                                : form.scholarship_certification
-                                                    ? 'border-green-400 bg-green-50'
-                                                    : 'border-gray-300 hover:border-blue-300'
-                                        }`}
-                                    >
-                                        <div>
-                                            <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                                            <div className="mt-2 text-sm text-gray-600">Click to choose file</div>
-                                            {form.scholarship_certification && (
-                                                <div className="mt-1 text-xs text-gray-500 truncate">File selected</div>
-                                            )}
-                                        </div>
-                                        <input
-                                            type="file"
-                                            accept="image/png,image/jpeg,application/pdf"
-                                            className="hidden"
-                                            required={form.is_scholar === 'scholar' && !(sub?.scholarship_certification_path)}
-                                            disabled={form.is_scholar !== 'scholar'}
-                                            onChange={e => handleFilePick('scholarship_certification', e.target.files?.[0] || null)}
-                                        />
-                                    </label>
-                                    {form.scholarship_certification && (
-                                        <button
-                                            type="button"
-                                            onClick={() => openLocalPreview(form.scholarship_certification)}
-                                            className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
-                                        >
-                                            Preview selected file
-                                        </button>
-                                    )}
+                                    <input
+                                        ref={el => fileInputRefs.current.scholarship_certification = el}
+                                        type="file"
+                                        accept="image/png,image/jpeg,application/pdf"
+                                        className="hidden"
+                                        required={form.is_scholar === 'scholar' && !(sub?.scholarship_certification_path)}
+                                        disabled={form.is_scholar !== 'scholar'}
+                                        onChange={e => handleFilePick('scholarship_certification', e.target.files?.[0] || null)}
+                                    />
+                                    <div className={`rounded-lg border-2 border-dashed overflow-hidden ${
+                                        form.is_scholar !== 'scholar'
+                                            ? 'border-gray-200 opacity-50'
+                                            : form.scholarship_certification
+                                                ? 'border-green-400 bg-green-50'
+                                                : 'border-gray-300'
+                                    }`}>
+                                        {form.scholarship_certification ? (
+                                            <div className="p-4">
+                                                {isImageFile(form.scholarship_certification) ? (
+                                                    <div className="mb-3">
+                                                        <ImagePreview 
+                                                            file={form.scholarship_certification}
+                                                            url={getPreviewUrl(form.scholarship_certification, 'scholarship_certification')}
+                                                            fileName={form.scholarship_certification.name}
+                                                        />
+                                                    </div>
+                                                ) : isPdfFile(form.scholarship_certification) ? (
+                                                    <div className="mb-3">
+                                                        <PDFPreview 
+                                                            file={form.scholarship_certification}
+                                                            url={getPreviewUrl(form.scholarship_certification, 'scholarship_certification')}
+                                                            fileName={form.scholarship_certification.name}
+                                                        />
+                                                    </div>
+                                                ) : null}
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openPreviewModal(form.scholarship_certification, 'scholarship_certification')}
+                                                        className="flex-1 px-3 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-600 rounded-md hover:bg-blue-50"
+                                                    >
+                                                        Preview
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleChooseAnotherFile('scholarship_certification')}
+                                                        disabled={form.is_scholar !== 'scholar'}
+                                                        className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        Choose another file
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <label 
+                                                className={`flex items-center justify-center p-6 text-center ${
+                                                    form.is_scholar === 'scholar' ? 'cursor-pointer hover:border-blue-300' : 'cursor-not-allowed'
+                                                }`}
+                                                onClick={() => form.is_scholar === 'scholar' && fileInputRefs.current.scholarship_certification?.click()}
+                                            >
+                                                <div>
+                                                    <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                                                    <div className="mt-2 text-sm text-gray-600">Click to choose file</div>
+                                                </div>
+                                            </label>
+                                        )}
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">SOA</label>
-                                    <label
-                                        className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-6 text-center ${form.sao_photo ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-300'}`}
-                                    >
-                                        <div>
-                                            <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                                            <div className="mt-2 text-sm text-gray-600">Click to choose file</div>
-                                            {form.sao_photo && (
-                                                <div className="mt-1 text-xs text-gray-500 truncate">File selected</div>
-                                            )}
-                                        </div>
-                                        <input
-                                            type="file"
-                                            accept="image/png,image/jpeg,application/pdf"
-                                            className="hidden"
-                                            required={!sub?.sao_photo_path}
-                                            onChange={e => handleFilePick('sao_photo', e.target.files?.[0] || null)}
-                                        />
-                                    </label>
-                                    {form.sao_photo && (
-                                        <button
-                                            type="button"
-                                            onClick={() => openLocalPreview(form.sao_photo)}
-                                            className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
-                                        >
-                                            Preview selected file
-                                        </button>
-                                    )}
+                                    <input
+                                        ref={el => fileInputRefs.current.sao_photo = el}
+                                        type="file"
+                                        accept="image/png,image/jpeg,application/pdf"
+                                        className="hidden"
+                                        required={!sub?.sao_photo_path}
+                                        onChange={e => handleFilePick('sao_photo', e.target.files?.[0] || null)}
+                                    />
+                                    <div className={`rounded-lg border-2 border-dashed overflow-hidden ${form.sao_photo ? 'border-green-400 bg-green-50' : 'border-gray-300'}`}>
+                                        {form.sao_photo ? (
+                                            <div className="p-4">
+                                                {isImageFile(form.sao_photo) ? (
+                                                    <div className="mb-3">
+                                                        <ImagePreview 
+                                                            file={form.sao_photo}
+                                                            url={getPreviewUrl(form.sao_photo, 'sao_photo')}
+                                                            fileName={form.sao_photo.name}
+                                                        />
+                                                    </div>
+                                                ) : isPdfFile(form.sao_photo) ? (
+                                                    <div className="mb-3">
+                                                        <PDFPreview 
+                                                            file={form.sao_photo}
+                                                            url={getPreviewUrl(form.sao_photo, 'sao_photo')}
+                                                            fileName={form.sao_photo.name}
+                                                        />
+                                                    </div>
+                                                ) : null}
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openPreviewModal(form.sao_photo, 'sao_photo')}
+                                                        className="flex-1 px-3 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-600 rounded-md hover:bg-blue-50"
+                                                    >
+                                                        Preview
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleChooseAnotherFile('sao_photo')}
+                                                        className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                                                    >
+                                                        Choose another file
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <label 
+                                                className="flex cursor-pointer items-center justify-center p-6 text-center hover:border-blue-300"
+                                                onClick={() => fileInputRefs.current.sao_photo?.click()}
+                                            >
+                                                <div>
+                                                    <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                                                    <div className="mt-2 text-sm text-gray-600">Click to choose file</div>
+                                                </div>
+                                            </label>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
@@ -429,13 +902,13 @@ export default function EnrollmentVerificationCard({ user }) {
         </div>
         {/* Beneficiary review modal – opened before submitting to backend */}
         {showReview && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center">
+            <div className="fixed inset-0 z-40 flex items-center justify-center p-2 sm:p-4">
                 <div
                     className="absolute inset-0 bg-gray-900/40"
                     onClick={() => !saving && setShowReview(false)}
                 />
-                <div className="relative bg-white w-full max-w-xl rounded-lg shadow-xl">
-                    <div className="px-6 py-4 border-b">
+                <div className="relative bg-white w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] rounded-lg shadow-xl flex flex-col">
+                    <div className="px-6 py-4 border-b flex-shrink-0">
                         <h3 className="text-lg font-semibold text-gray-900">Review your enrollment submission</h3>
                         <p className="mt-1 text-sm text-gray-600">
                             Please carefully review your details and documents below. If everything
@@ -443,7 +916,7 @@ export default function EnrollmentVerificationCard({ user }) {
                             send them to your caseworker.
                         </p>
                     </div>
-                    <div className="p-6 space-y-4 text-sm">
+                    <div className="p-6 space-y-4 text-sm overflow-y-auto flex-1 min-h-0">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <div className="text-gray-600">Enrollment Date</div>
@@ -459,56 +932,113 @@ export default function EnrollmentVerificationCard({ user }) {
                                     {form.is_scholar === 'scholar' ? 'Scholar' : (form.is_scholar === 'non-scholar' ? 'Non-scholar' : 'Not set')}
                                 </div>
                             </div>
+                        </div>
+                        
+                        {/* File Preview Cards */}
+                        <div className="space-y-4 mt-6">
                             <div>
-                                <div className="text-gray-600">Enrollment Certification</div>
-                                <div className="font-medium">
-                                    {form.enrollment_certification ? 'File selected' : 'No file selected'}
-                                </div>
-                                {form.enrollment_certification && (
-                                    <button
-                                        type="button"
-                                        onClick={() => openLocalPreview(form.enrollment_certification)}
-                                        className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
-                                    >
-                                        View file (opens in new tab)
-                                    </button>
+                                <div className="text-gray-600 mb-2">Enrollment Certification</div>
+                                {form.enrollment_certification ? (
+                                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                        {isImageFile(form.enrollment_certification) ? (
+                                            <ImagePreview 
+                                                file={form.enrollment_certification}
+                                                url={getPreviewUrl(form.enrollment_certification, 'enrollment_certification')}
+                                                fileName={form.enrollment_certification.name}
+                                            />
+                                        ) : isPdfFile(form.enrollment_certification) ? (
+                                            <PDFPreview 
+                                                file={form.enrollment_certification}
+                                                url={getPreviewUrl(form.enrollment_certification, 'enrollment_certification')}
+                                                fileName={form.enrollment_certification.name}
+                                            />
+                                        ) : null}
+                                        <div className="p-2 bg-gray-50 border-t border-gray-200">
+                                            <div className="text-xs text-gray-600 truncate">{form.enrollment_certification.name}</div>
+                                            <button
+                                                type="button"
+                                                onClick={() => openPreviewModal(form.enrollment_certification, 'enrollment_certification')}
+                                                className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                            >
+                                                View full preview
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-gray-500 italic">No file selected</div>
                                 )}
                             </div>
+
                             <div>
-                                <div className="text-gray-600">Scholarship Certification</div>
-                                <div className="font-medium">
-                                    {form.scholarship_certification
-                                        ? 'File selected'
-                                        : (sub?.scholarship_certification_path ? 'Existing file on record' : 'No file provided')}
-                                </div>
-                                {form.scholarship_certification && (
-                                    <button
-                                        type="button"
-                                        onClick={() => openLocalPreview(form.scholarship_certification)}
-                                        className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
-                                    >
-                                        View file (opens in new tab)
-                                    </button>
+                                <div className="text-gray-600 mb-2">Scholarship Certification</div>
+                                {form.scholarship_certification ? (
+                                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                        {isImageFile(form.scholarship_certification) ? (
+                                            <ImagePreview 
+                                                file={form.scholarship_certification}
+                                                url={getPreviewUrl(form.scholarship_certification, 'scholarship_certification')}
+                                                fileName={form.scholarship_certification.name}
+                                            />
+                                        ) : isPdfFile(form.scholarship_certification) ? (
+                                            <PDFPreview 
+                                                file={form.scholarship_certification}
+                                                url={getPreviewUrl(form.scholarship_certification, 'scholarship_certification')}
+                                                fileName={form.scholarship_certification.name}
+                                            />
+                                        ) : null}
+                                        <div className="p-2 bg-gray-50 border-t border-gray-200">
+                                            <div className="text-xs text-gray-600 truncate">{form.scholarship_certification.name}</div>
+                                            <button
+                                                type="button"
+                                                onClick={() => openPreviewModal(form.scholarship_certification, 'scholarship_certification')}
+                                                className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                            >
+                                                View full preview
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : sub?.scholarship_certification_path ? (
+                                    <div className="text-gray-600">Existing file on record</div>
+                                ) : (
+                                    <div className="text-gray-500 italic">No file provided</div>
                                 )}
                             </div>
+
                             <div>
-                                <div className="text-gray-600">SOA</div>
-                                <div className="font-medium break-words">
-                                    {form.sao_photo ? 'File selected' : 'No file selected'}
-                                </div>
-                                {form.sao_photo && (
-                                    <button
-                                        type="button"
-                                        onClick={() => openLocalPreview(form.sao_photo)}
-                                        className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
-                                    >
-                                        View file (opens in new tab)
-                                    </button>
+                                <div className="text-gray-600 mb-2">SOA</div>
+                                {form.sao_photo ? (
+                                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                        {isImageFile(form.sao_photo) ? (
+                                            <ImagePreview 
+                                                file={form.sao_photo}
+                                                url={getPreviewUrl(form.sao_photo, 'sao_photo')}
+                                                fileName={form.sao_photo.name}
+                                            />
+                                        ) : isPdfFile(form.sao_photo) ? (
+                                            <PDFPreview 
+                                                file={form.sao_photo}
+                                                url={getPreviewUrl(form.sao_photo, 'sao_photo')}
+                                                fileName={form.sao_photo.name}
+                                            />
+                                        ) : null}
+                                        <div className="p-2 bg-gray-50 border-t border-gray-200">
+                                            <div className="text-xs text-gray-600 truncate">{form.sao_photo.name}</div>
+                                            <button
+                                                type="button"
+                                                onClick={() => openPreviewModal(form.sao_photo, 'sao_photo')}
+                                                className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                            >
+                                                View full preview
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-gray-500 italic">No file selected</div>
                                 )}
                             </div>
                         </div>
                     </div>
-                    <div className="px-6 py-4 border-t flex items-center justify-between">
+                    <div className="px-6 py-4 border-t flex items-center justify-between flex-shrink-0">
                         <button
                             type="button"
                             onClick={() => !saving && setShowReview(false)}
@@ -525,6 +1055,97 @@ export default function EnrollmentVerificationCard({ user }) {
                         >
                             {saving ? 'Submitting…' : 'Confirm & Submit'}
                         </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* File Preview Modal */}
+        {previewFile && previewUrl && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" key={`modal-${previewKey}`}>
+                <div
+                    className="absolute inset-0 bg-gray-900/60"
+                    onClick={closePreviewModal}
+                />
+                <div className="relative bg-white w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] rounded-lg shadow-xl flex flex-col">
+                    <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                            {previewFile.name || 'File Preview'}
+                        </h3>
+                        <div className="flex items-center gap-3">
+                            {(isImageFile(previewFile) || isPdfFile(previewFile)) && (
+                                <button
+                                    type="button"
+                                    onClick={downloadPreviewFile}
+                                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Download
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={closePreviewModal}
+                                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                            >
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-auto p-6 bg-gray-100 min-h-0" key={`content-${previewKey}`}>
+                        {previewUrl && previewFile && isImageFile(previewFile) ? (
+                            <div className="flex items-center justify-center h-full w-full">
+                                <img
+                                    key={`img-${previewKey}-${previewUrl}`}
+                                    src={previewUrl}
+                                    alt={previewFile.name || 'Preview'}
+                                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg bg-white"
+                                    style={{ maxHeight: 'calc(90vh - 180px)', maxWidth: '100%' }}
+                                    onError={(e) => {
+                                        console.error('Failed to load image preview', e)
+                                        setToast({ 
+                                            open: true, 
+                                            type: 'error', 
+                                            title: 'Preview failed', 
+                                            message: 'Could not load the image preview. The file may be corrupted.' 
+                                        })
+                                    }}
+                                />
+                            </div>
+                        ) : previewUrl && previewFile && isPdfFile(previewFile) ? (
+                            <div className="flex items-center justify-center h-full w-full">
+                                <iframe
+                                    key={`iframe-${previewKey}-${previewUrl}`}
+                                    src={previewUrl}
+                                    className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
+                                    style={{ minHeight: 'calc(90vh - 180px)', width: '100%' }}
+                                    title={`PDF Preview - ${previewFile.name || 'PDF'}`}
+                                    onError={(e) => {
+                                        console.error('Failed to load PDF preview', e)
+                                        setToast({ 
+                                            open: true, 
+                                            type: 'error', 
+                                            title: 'Preview failed', 
+                                            message: 'Could not load the PDF preview. The file may be corrupted.' 
+                                        })
+                                    }}
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center min-h-full">
+                                <div className="text-center">
+                                    <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <p className="mt-4 text-gray-600">Preview not available for this file type</p>
+                                    <p className="mt-2 text-sm text-gray-500">{previewFile?.name || 'Unknown file'}</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

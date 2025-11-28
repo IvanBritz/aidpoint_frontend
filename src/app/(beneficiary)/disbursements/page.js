@@ -224,20 +224,22 @@ const BeneficiaryDisbursements = () => {
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
-                            <div>
-                              <strong>Finance Disbursed:</strong> {formatDate(d.finance_disbursed_at)}
-                              {d.finance_dispenser && (
-                                <span className="ml-1 text-gray-600">
-                                  by {d.finance_dispenser.firstname} {d.finance_dispenser.lastname}
-                                </span>
-                              )}
-                            </div>
+                            {d.finance_disbursed_at && (
+                              <div>
+                                <strong>Finance Disbursed:</strong> {formatDate(d.finance_disbursed_at)}
+                                {(d.finance_dispenser || d.financeDispenser) && (
+                                  <span className="ml-1 text-gray-600">
+                                    by {(d.finance_dispenser || d.financeDispenser)?.firstname} {(d.finance_dispenser || d.financeDispenser)?.lastname}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             {d.caseworker_received_at && (
                               <div>
                                 <strong>Caseworker Received:</strong> {formatDate(d.caseworker_received_at)}
-                                {d.caseworker_receiver && (
+                                {(d.caseworker_receiver || d.caseworkerReceiver) && (
                                   <span className="ml-1 text-gray-600">
-                                    by {d.caseworker_receiver.firstname} {d.caseworker_receiver.lastname}
+                                    by {(d.caseworker_receiver || d.caseworkerReceiver)?.firstname} {(d.caseworker_receiver || d.caseworkerReceiver)?.lastname}
                                   </span>
                                 )}
                               </div>
@@ -245,9 +247,9 @@ const BeneficiaryDisbursements = () => {
                             {d.caseworker_disbursed_at && (
                               <div>
                                 <strong>Ready for Collection:</strong> {formatDate(d.caseworker_disbursed_at)}
-                                {d.caseworker_dispenser && (
+                                {(d.caseworker_dispenser || d.caseworkerDispenser) && (
                                   <span className="ml-1 text-gray-600">
-                                    by {d.caseworker_dispenser.firstname} {d.caseworker_dispenser.lastname}
+                                    by {(d.caseworker_dispenser || d.caseworkerDispenser)?.firstname} {(d.caseworker_dispenser || d.caseworkerDispenser)?.lastname}
                                   </span>
                                 )}
                               </div>
@@ -255,6 +257,11 @@ const BeneficiaryDisbursements = () => {
                             {d.beneficiary_received_at && (
                               <div>
                                 <strong>You Received:</strong> {formatDate(d.beneficiary_received_at)}
+                                {user && (
+                                  <span className="ml-1 text-gray-600">
+                                    by {user.firstname} {user.lastname}
+                                  </span>
+                                )}
                               </div>
                             )}
                           </div>
