@@ -226,15 +226,30 @@ const BeneficiaryDisbursements = () => {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
                             <div>
                               <strong>Finance Disbursed:</strong> {formatDate(d.finance_disbursed_at)}
+                              {d.finance_dispenser && (
+                                <span className="ml-1 text-gray-600">
+                                  by {d.finance_dispenser.firstname} {d.finance_dispenser.lastname}
+                                </span>
+                              )}
                             </div>
                             {d.caseworker_received_at && (
                               <div>
                                 <strong>Caseworker Received:</strong> {formatDate(d.caseworker_received_at)}
+                                {d.caseworker_receiver && (
+                                  <span className="ml-1 text-gray-600">
+                                    by {d.caseworker_receiver.firstname} {d.caseworker_receiver.lastname}
+                                  </span>
+                                )}
                               </div>
                             )}
                             {d.caseworker_disbursed_at && (
                               <div>
                                 <strong>Ready for Collection:</strong> {formatDate(d.caseworker_disbursed_at)}
+                                {d.caseworker_dispenser && (
+                                  <span className="ml-1 text-gray-600">
+                                    by {d.caseworker_dispenser.firstname} {d.caseworker_dispenser.lastname}
+                                  </span>
+                                )}
                               </div>
                             )}
                             {d.beneficiary_received_at && (
