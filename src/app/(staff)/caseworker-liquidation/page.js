@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
@@ -26,6 +26,12 @@ const CaseworkerLiquidationPage = () => {
   // Receipt review modal state
   const [showReceiptModal, setShowReceiptModal] = useState(false)
   const [selectedReceiptLiquidation, setSelectedReceiptLiquidation] = useState(null)
+  
+  // Receipt preview modal state
+  const [previewModal, setPreviewModal] = useState({ open: false, fileUrl: null, fileName: null, fileType: null, previewUrl: null })
+  const [previewKey, setPreviewKey] = useState(0)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewBlobUrlRef = useRef(null)
 
   const loadLiquidations = async () => {
     try {
@@ -233,6 +239,154 @@ const CaseworkerLiquidationPage = () => {
   }
 
   useEffect(() => { if (user) loadLiquidations() }, [user?.id])
+  
+  // Cleanup preview blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (previewBlobUrlRef.current) {
+        window.URL.revokeObjectURL(previewBlobUrlRef.current)
+        previewBlobUrlRef.current = null
+      }
+    }
+  }, [])
+  
+  // Helper function to check if file is an image
+  const isImageFile = (url) => {
+    if (!url) return false
+    const extension = url.split('.').pop()?.toLowerCase().split('?')[0]
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension)
+  }
+  
+  // Helper function to check if file is a PDF
+  const isPdfFile = (url) => {
+    if (!url) return false
+    const extension = url.split('.').pop()?.toLowerCase().split('?')[0]
+    return extension === 'pdf'
+  }
+  
+  // Close full preview modal
+  const closeFullPreview = useCallback(() => {
+    // Cleanup blob URL
+    if (previewBlobUrlRef.current) {
+      window.URL.revokeObjectURL(previewBlobUrlRef.current)
+      previewBlobUrlRef.current = null
+    }
+    setPreviewModal({ open: false, fileUrl: null, fileName: null, fileType: null, previewUrl: null })
+  }, [])
+  
+  // Handle download
+  const handleDownload = useCallback(async () => {
+    if (!previewModal.previewUrl && !previewModal.fileUrl) return
+    
+    try {
+      const downloadUrl = previewModal.previewUrl || previewModal.fileUrl
+      const fileName = previewModal.fileName || 'receipt'
+      
+      // If we have a blob URL, we can download directly
+      if (previewModal.previewUrl && previewBlobUrlRef.current) {
+        const link = document.createElement('a')
+        link.href = previewModal.previewUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        // Otherwise, fetch and download
+        const response = await fetch(previewModal.fileUrl, {
+          headers: { 'Accept': '*/*' }
+        })
+        const blob = await response.blob()
+        const blobUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(blobUrl)
+      }
+    } catch (error) {
+      console.error('Download failed:', error)
+      alert('Failed to download file. Please try again.')
+    }
+  }, [previewModal])
+  
+  // Open full preview modal
+  const openReceiptPreview = async (receipt, liquidationId) => {
+    const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+    const imagePath = receipt.image || receipt.file_path || receipt.receipt_image
+    let viewUrl = imagePath
+    
+    // Build the proper view URL
+    if (imagePath && !imagePath.startsWith('http')) {
+      if (receipt.id && liquidationId) {
+        viewUrl = `${backend}/api/liquidations/${liquidationId}/receipts/${receipt.id}/view`
+      } else {
+        viewUrl = `${backend}/storage/${imagePath}`
+      }
+    }
+    
+    setPreviewKey(prev => prev + 1)
+    setPreviewLoading(true)
+    
+    // Try to detect file type from receipt file path if available
+    let initialFileType = null
+    if (receipt.file_path || receipt.image || receipt.receipt_image) {
+      const pathToCheck = receipt.file_path || receipt.image || receipt.receipt_image
+      initialFileType = isImageFile(pathToCheck) ? 'image' : isPdfFile(pathToCheck) ? 'pdf' : null
+    }
+    
+    const fileName = receipt.original_filename || receipt.file_path?.split('/').pop() || receipt.image?.split('/').pop() || 'Receipt'
+    
+    setPreviewModal({ open: true, fileUrl: viewUrl, fileName, fileType: initialFileType, previewUrl: null })
+    
+    try {
+      // Fetch as blob for server URLs
+      const response = await axios.get(viewUrl, {
+        responseType: 'blob',
+        headers: { 'Accept': '*/*' },
+        timeout: 30000,
+      })
+      
+      const contentType = response.headers['content-type'] || ''
+      
+      // Determine file type from Content-Type header
+      let detectedFileType = initialFileType
+      if (!detectedFileType) {
+        if (contentType.includes('image/')) {
+          detectedFileType = 'image'
+        } else if (contentType.includes('pdf') || contentType.includes('application/pdf')) {
+          detectedFileType = 'pdf'
+        } else {
+          // Default to PDF if content type is not clear (most receipts are PDFs)
+          detectedFileType = 'pdf'
+        }
+      }
+      
+      const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: contentType })
+      
+      const blobUrl = window.URL.createObjectURL(blob)
+      
+      // Cleanup previous blob URL
+      if (previewBlobUrlRef.current) {
+        window.URL.revokeObjectURL(previewBlobUrlRef.current)
+      }
+      previewBlobUrlRef.current = blobUrl
+      
+      setPreviewModal(prev => ({ ...prev, previewUrl: blobUrl, fileType: detectedFileType || 'pdf' }))
+    } catch (err) {
+      console.error('Failed to load receipt preview:', err)
+      // Fallback: try to use direct URL if it's an image
+      if (initialFileType === 'image') {
+        setPreviewModal(prev => ({ ...prev, previewUrl: viewUrl }))
+      } else {
+        // Still show modal but with error state
+        setPreviewModal(prev => ({ ...prev, previewUrl: null }))
+      }
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
 
   const handleApprovalAction = (liquidation, action) => {
     setSelectedLiquidation(liquidation)
@@ -871,31 +1025,15 @@ const CaseworkerLiquidationPage = () => {
                               <div className="bg-gray-100 rounded-lg p-4">
                                 <div className="text-xs text-gray-500 mb-3">Receipt Document:</div>
                                 <button
-                                  onClick={() => {
-                                    const imagePath = receipt.image || receipt.file_path || receipt.receipt_image
-                                    let fullUrl = imagePath
-                                    
-                                    if (imagePath && !imagePath.startsWith('http')) {
-                                      const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
-                                      // Use the view endpoint for proper viewing
-                                      if (receipt.id && selectedReceiptLiquidation?.id) {
-                                        fullUrl = `${backend}/api/liquidations/${selectedReceiptLiquidation.id}/receipts/${receipt.id}/view`
-                                      } else {
-                                        fullUrl = `${backend}/storage/${imagePath}`
-                                      }
-                                    }
-                                    window.open(fullUrl, '_blank')
-                                  }}
+                                  onClick={() => openReceiptPreview(receipt, selectedReceiptLiquidation?.id)}
                                   className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-sm"
                                 >
                                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                   </svg>
                                   View Receipt
                                 </button>
-                                <div className="text-xs text-gray-400 mt-2 text-center">
-                                  Opens in new tab
-                                </div>
                               </div>
                             ) : (
                               <div className="bg-gray-100 rounded-lg p-4 text-center text-gray-500 text-sm">
@@ -949,6 +1087,106 @@ const CaseworkerLiquidationPage = () => {
           </div>
         </div>
       )}
+      {/* Full Receipt Preview Modal */}
+      {previewModal.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4" key={`preview-modal-${previewKey}`}>
+          <div
+            className="absolute inset-0 bg-gray-900/60"
+            onClick={closeFullPreview}
+          />
+          <div className="relative bg-white w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] rounded-lg shadow-xl flex flex-col">
+            <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {previewModal.fileName || 'Receipt Preview'}
+              </h3>
+              <div className="flex items-center gap-3">
+                {(previewModal.previewUrl || previewModal.fileUrl) && !previewLoading && (
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
+                    title="Download file"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Download
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={closeFullPreview}
+                  className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                  title="Close"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-6 bg-gray-100 min-h-0" key={`preview-content-${previewKey}`}>
+              {previewLoading ? (
+                <div className="flex items-center justify-center min-h-full">
+                  <div className="text-center text-gray-400">
+                    <svg className="animate-spin h-12 w-12 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p className="text-sm">Loading preview...</p>
+                  </div>
+                </div>
+              ) : previewModal.previewUrl && previewModal.fileType === 'image' ? (
+                <div className="flex items-center justify-center h-full w-full">
+                  <img
+                    key={`preview-img-${previewKey}`}
+                    src={previewModal.previewUrl}
+                    alt={previewModal.fileName || 'Receipt Preview'}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg bg-white"
+                    style={{ maxHeight: 'calc(90vh - 180px)' }}
+                    onError={() => {
+                      // If image fails, try as PDF
+                      setPreviewModal(prev => ({ ...prev, fileType: 'pdf' }))
+                    }}
+                  />
+                </div>
+              ) : previewModal.previewUrl && previewModal.fileType === 'pdf' ? (
+                <div className="flex items-center justify-center h-full w-full">
+                  <iframe
+                    key={`preview-iframe-${previewKey}`}
+                    src={previewModal.previewUrl}
+                    className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
+                    style={{ minHeight: 'calc(90vh - 180px)', width: '100%' }}
+                    title={`PDF Preview - ${previewModal.fileName || 'Receipt'}`}
+                  />
+                </div>
+              ) : previewModal.previewUrl ? (
+                // If we have a URL but no file type detected, default to PDF (most receipts are PDFs)
+                <div className="flex items-center justify-center h-full w-full">
+                  <iframe
+                    key={`preview-iframe-${previewKey}`}
+                    src={previewModal.previewUrl}
+                    className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
+                    style={{ minHeight: 'calc(90vh - 180px)', width: '100%' }}
+                    title={`PDF Preview - ${previewModal.fileName || 'Receipt'}`}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center min-h-full">
+                  <div className="text-center text-gray-400">
+                    <svg className="mx-auto h-12 w-12 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-sm">Preview not available</p>
+                    <p className="text-xs mt-2 text-gray-500">{previewModal.fileName}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Global popup message */}
       <PopupMessage {...popupState} onClose={closePopup} />
     </div>
