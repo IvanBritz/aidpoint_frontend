@@ -225,6 +225,9 @@ export default function EnrollmentVerificationCard({ user }) {
     const [previewFile, setPreviewFile] = useState(null)
     const [previewUrl, setPreviewUrl] = useState(null)
     const [previewKey, setPreviewKey] = useState(0) // Key to force re-render
+    const [loadingDocument, setLoadingDocument] = useState(null) // Track which document is loading
+    const previewBlobUrlRef = useRef(null) // Store blob URL for server documents
+    const documentBlobCache = useRef({}) // Cache blob URLs by document path to avoid re-fetching
     // Store preview URLs for each file to avoid recreating them
     const [filePreviewUrls, setFilePreviewUrls] = useState({})
     // Store file input refs for "Choose another file" functionality
@@ -362,6 +365,320 @@ export default function EnrollmentVerificationCard({ user }) {
         return /\.pdf$/i.test(file.name || '')
     }
 
+    // Helper function to check if path is an image (for server documents)
+    // Production-safe: Only supports JPG, JPEG, and PNG as specified
+    const isImagePath = (path) => {
+        if (!path) return false
+        const extension = path.split('.').pop()?.toLowerCase()
+        return ['jpg', 'jpeg', 'png'].includes(extension)
+    }
+
+    // Helper function to check if path is a PDF (for server documents)
+    const isPdfPath = (path) => {
+        if (!path) return false
+        const extension = path.split('.').pop()?.toLowerCase()
+        return extension === 'pdf'
+    }
+    
+    // Production-safe validation: Only allow supported file types
+    const isSupportedFileType = (contentType, extension) => {
+        const supportedTypes = [
+            'image/jpeg',
+            'image/jpg', 
+            'image/png',
+            'application/pdf'
+        ]
+        const supportedExtensions = ['jpg', 'jpeg', 'png', 'pdf']
+        
+        const isValidType = supportedTypes.includes(contentType?.toLowerCase())
+        const isValidExtension = supportedExtensions.includes(extension?.toLowerCase())
+        
+        return isValidType || isValidExtension
+    }
+
+    // Open document from server in preview modal
+    const openServerDocument = async (path, documentType) => {
+        if (!path) return
+        if (loadingDocument === documentType) return
+        
+        // Always reset modal state first to ensure clean state
+        setPreviewFile(null)
+        setPreviewUrl(null)
+        setPreviewKey(prev => prev + 1)
+        setLoadingDocument(documentType)
+        
+        // Check if we already have a cached blob URL for this document
+        // We'll try to use it, but if it fails to load, we'll fetch a fresh one
+        if (documentBlobCache.current[path]) {
+            const cached = documentBlobCache.current[path]
+            const fileName = path.split('/').pop() || documentType
+            
+            // Verify the cached blob URL exists and looks valid
+            if (cached.blobUrl && cached.blobUrl.startsWith('blob:')) {
+                // Ensure we have a valid content type for the cached file
+                const fileExtension = fileName.split('.').pop()?.toLowerCase() || path.split('.').pop()?.toLowerCase() || ''
+                const mimeTypes = {
+                    'jpg': 'image/jpeg',
+                    'jpeg': 'image/jpeg',
+                    'png': 'image/png',
+                    'pdf': 'application/pdf'
+                }
+                const finalCachedType = cached.contentType || mimeTypes[fileExtension] || 'application/octet-stream'
+                
+                // Increment preview key to force fresh render
+                setPreviewKey(prev => prev + 1)
+                
+                // Set the file and URL from cache
+                // If the blob URL is invalid/revoked, the onError handler will detect it
+                // and automatically fetch a fresh copy
+                setPreviewFile({
+                    name: fileName,
+                    type: finalCachedType
+                })
+                setPreviewUrl(cached.blobUrl)
+                setLoadingDocument(null)
+                
+                // Use cached version - if it fails, error handler will re-fetch
+                return
+            } else {
+                // If cached URL is invalid, clear cache and fetch fresh
+                delete documentBlobCache.current[path]
+            }
+        }
+        
+        // Determine file type from path
+        const isImage = isImagePath(path)
+        const isPdf = isPdfPath(path)
+        
+        // Production-safe validation: Check file type before proceeding
+        if (!isImage && !isPdf) {
+            setToast({ 
+                open: true, 
+                type: 'error', 
+                title: 'Preview not supported', 
+                message: 'Preview is only available for PDF, PNG, JPEG, and JPG files. Unsupported file types cannot be rendered for security reasons.' 
+            })
+            setLoadingDocument(null)
+            return
+        }
+        
+        // Additional validation using extension
+        const extension = path.split('.').pop()?.toLowerCase()
+        if (!isSupportedFileType(null, extension)) {
+            setToast({ 
+                open: true, 
+                type: 'error', 
+                title: 'Unsupported file type', 
+                message: `File type "${extension}" is not supported. Only PDF, PNG, JPEG, and JPG files can be previewed.` 
+            })
+            setLoadingDocument(null)
+            return
+        }
+        
+        // Extract filename from path - preserve original filename
+        // Path format might be: "documents/folder/filename.png" or just "filename.png"
+        let fileName = path.split('/').pop() || documentType
+        
+        // If filename doesn't have extension, try to get it from path
+        if (!fileName.includes('.')) {
+            const pathParts = path.split('/')
+            for (let i = pathParts.length - 1; i >= 0; i--) {
+                if (pathParts[i].includes('.')) {
+                    fileName = pathParts[i]
+                    break
+                }
+            }
+        }
+        
+        // Determine initial content type from extension for the temp file
+        const fileExtension = fileName.split('.').pop()?.toLowerCase() || path.split('.').pop()?.toLowerCase() || ''
+        const initialMimeTypes = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'pdf': 'application/pdf'
+        }
+        const initialContentType = initialMimeTypes[fileExtension] || (isImage ? 'image/jpeg' : 'application/pdf')
+        
+        // Create a temporary file-like object for the modal with correct type
+        const tempFile = {
+            name: fileName,
+            type: initialContentType
+        }
+        
+        setPreviewFile(tempFile)
+        setPreviewUrl(null) // Will be set after fetch
+        
+        try {
+            const response = await axios.get(`/api/documents/${path}`, {
+                responseType: 'blob',
+                headers: { 
+                    'Accept': '*/*',
+                },
+                timeout: 30000,
+            })
+            
+            // Get content type from response headers first, then fallback to file extension
+            const headerContentType = response.headers['content-type'] || response.headers['Content-Type'] || ''
+            const extension = path.split('.').pop()?.toLowerCase() || ''
+            
+            // Map file extensions to MIME types
+            const mimeTypes = {
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'png': 'image/png',
+                'pdf': 'application/pdf'
+            }
+            
+            // Determine content type - prefer header, then extension, then default
+            let contentType = headerContentType
+            if (!contentType || contentType === 'application/octet-stream') {
+                contentType = mimeTypes[extension] || (isImage ? 'image/jpeg' : 'application/pdf')
+            }
+            
+            // Ensure content type is valid for our supported types
+            if (!contentType.startsWith('image/') && contentType !== 'application/pdf') {
+                contentType = mimeTypes[extension] || (isImage ? 'image/jpeg' : 'application/pdf')
+            }
+            
+            // Get the blob from response
+            let blob = response.data
+            
+            // Verify we have valid blob data
+            if (!blob) {
+                throw new Error('No data received from server')
+            }
+            
+            // Ensure blob is a proper Blob instance
+            if (!(blob instanceof Blob)) {
+                blob = new Blob([blob], { type: contentType })
+            }
+            
+            // Verify blob was created successfully
+            if (!blob || blob.size === 0) {
+                throw new Error('Invalid blob data received - blob is empty or corrupted')
+            }
+            
+            // Only recreate blob with correct MIME type if the current type is wrong
+            // This is critical for proper image rendering in the browser
+            const needsTypeFix = blob.type === 'application/octet-stream' || 
+                                 blob.type === '' || 
+                                 (isImage && !blob.type.startsWith('image/')) ||
+                                 (isPdf && blob.type !== 'application/pdf')
+            
+            if (needsTypeFix) {
+                // Recreate blob with correct MIME type using ArrayBuffer
+                // This preserves the actual file data while fixing the MIME type
+                const arrayBuffer = await blob.arrayBuffer()
+                blob = new Blob([arrayBuffer], { type: contentType })
+            }
+            
+            // Cleanup previous preview blob URL if different
+            if (previewBlobUrlRef.current && previewBlobUrlRef.current !== documentBlobCache.current[path]?.blobUrl) {
+                const isCached = Object.values(documentBlobCache.current).some(cached => cached.blobUrl === previewBlobUrlRef.current)
+                if (!isCached) {
+                    try {
+                        window.URL.revokeObjectURL(previewBlobUrlRef.current)
+                    } catch (e) {
+                        // Ignore errors when revoking URLs
+                    }
+                }
+            }
+            
+            // Create blob URL
+            const blobUrl = window.URL.createObjectURL(blob)
+            if (!blobUrl || !blobUrl.startsWith('blob:')) {
+                throw new Error('Failed to create blob URL')
+            }
+            
+            // Update ref and cache (store path for error recovery)
+            previewBlobUrlRef.current = blobUrl
+            documentBlobCache.current[path] = {
+                blobUrl: blobUrl,
+                contentType: contentType,
+                path: path // Store path for error recovery
+            }
+            
+            // Create file object with correct type
+            const finalType = blob.type || contentType
+            const updatedFile = {
+                name: fileName,
+                type: finalType
+            }
+            
+            // Increment preview key to force fresh render
+            setPreviewKey(prev => prev + 1)
+            
+            // Set state - this will trigger the modal to render
+            setPreviewFile(updatedFile)
+            setPreviewUrl(blobUrl)
+            
+            // Log success in development
+            if (process.env.NODE_ENV === 'development') {
+                console.log('Document loaded successfully:', {
+                    fileName,
+                    contentType: finalType,
+                    blobType: blob.type,
+                    blobSize: blob.size,
+                    isImage,
+                    isPdf,
+                    blobUrl: blobUrl.substring(0, 50) + '...'
+                })
+            }
+        } catch (err) {
+            // Log error details for debugging
+            if (process.env.NODE_ENV === 'development') {
+                console.error('Failed to open document:', {
+                    error: err,
+                    message: err?.message,
+                    response: err?.response,
+                    status: err?.response?.status,
+                    path,
+                    documentType,
+                    isImage,
+                    isPdf
+                })
+            }
+            
+            // Clear any invalid cache entry for this path
+            if (documentBlobCache.current[path]) {
+                try {
+                    const cached = documentBlobCache.current[path]
+                    if (cached.blobUrl) {
+                        window.URL.revokeObjectURL(cached.blobUrl)
+                    }
+                } catch (e) {
+                    // Ignore errors when revoking
+                }
+                delete documentBlobCache.current[path]
+            }
+            
+            // Determine error message
+            let errorMessage = 'Could not open the document. Please try again.'
+            if (err?.response?.status === 404) {
+                errorMessage = 'Document not found. It may have been deleted.'
+            } else if (err?.response?.status === 401) {
+                errorMessage = 'You are not authorized to view this document.'
+            } else if (err?.message) {
+                errorMessage = err.message
+            }
+            
+            setToast({ 
+                open: true, 
+                type: 'error', 
+                title: 'Failed to open document', 
+                message: errorMessage
+            })
+            
+            // Fully reset preview state on error
+            setPreviewFile(null)
+            setPreviewUrl(null)
+            setPreviewKey(prev => prev + 1)
+        } finally {
+            setLoadingDocument(null)
+        }
+    }
+
     // Generate preview URL for a file (uses cached URL if available)
     const getPreviewUrl = (file, key) => {
         if (!file) return null
@@ -444,18 +761,15 @@ export default function EnrollmentVerificationCard({ user }) {
         }
     }
 
-    // Close preview modal
+    // Close preview modal - fully reset state for consistent behavior
     const closePreviewModal = () => {
-        // Revoke the modal preview URL when closing (thumbnails use separate cached URLs)
-        if (previewUrl) {
-            // Only revoke if it's not a cached thumbnail URL
-            const isThumbnailUrl = Object.values(filePreviewUrls).includes(previewUrl)
-            if (!isThumbnailUrl) {
-                window.URL.revokeObjectURL(previewUrl)
-            }
-        }
+        // Reset all preview state to ensure clean state on next open
         setPreviewFile(null)
         setPreviewUrl(null)
+        // Increment preview key to force fresh render on next open
+        setPreviewKey(prev => prev + 1)
+        // Note: We don't revoke cached blob URLs here - they're kept for reuse
+        // Only revoke on component unmount or when explicitly replacing
     }
 
     // Handle "Choose another file" - clears input value and triggers file picker
@@ -485,21 +799,45 @@ export default function EnrollmentVerificationCard({ user }) {
         }
     }
 
-    // Cleanup preview URLs on unmount and when files are removed
+    // Cleanup preview URLs only on component unmount
+    // DO NOT include dependencies - we only want cleanup on unmount, not on state changes
     useEffect(() => {
         return () => {
-            // Cleanup modal preview URL
-            if (previewUrl) {
-                window.URL.revokeObjectURL(previewUrl)
-            }
-            // Cleanup all file preview URLs
-            Object.values(filePreviewUrls).forEach(url => {
-                if (url) {
-                    window.URL.revokeObjectURL(url)
+            // Cleanup all cached server document blob URLs on unmount only
+            Object.values(documentBlobCache.current).forEach(cached => {
+                if (cached?.blobUrl) {
+                    try {
+                        window.URL.revokeObjectURL(cached.blobUrl)
+                    } catch (e) {
+                        // Ignore errors when revoking URLs
+                    }
                 }
             })
+            documentBlobCache.current = {}
+            
+            // Cleanup all file preview URLs (local files) on unmount only
+            Object.values(filePreviewUrls).forEach(url => {
+                if (url) {
+                    try {
+                        window.URL.revokeObjectURL(url)
+                    } catch (e) {
+                        // Ignore errors when revoking URLs
+                    }
+                }
+            })
+            
+            // Cleanup current preview blob URL if it exists
+            if (previewBlobUrlRef.current) {
+                try {
+                    window.URL.revokeObjectURL(previewBlobUrlRef.current)
+                    previewBlobUrlRef.current = null
+                } catch (e) {
+                    // Ignore errors when revoking URLs
+                }
+            }
         }
-    }, [previewUrl, filePreviewUrls])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []) // Empty dependency array - only run on mount/unmount
 
     // Open the review dialog when the form is valid instead of immediately
     // sending the payload to the backend. This ensures beneficiaries always
@@ -599,40 +937,37 @@ export default function EnrollmentVerificationCard({ user }) {
                                     {sub.enrollment_certification_path && (
                                         <div>
                                             <div className="text-gray-600">Enrollment Certification</div>
-                                            <a
-                                                href={getApiUrl(`/api/documents/${sub.enrollment_certification_path}`)}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 underline hover:text-blue-800"
+                                            <button
+                                                onClick={() => openServerDocument(sub.enrollment_certification_path, 'Enrollment_Certification')}
+                                                disabled={loadingDocument === 'Enrollment_Certification'}
+                                                className="text-blue-600 underline hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                View Document
-                                            </a>
+                                                {loadingDocument === 'Enrollment_Certification' ? 'Loading...' : 'View Document'}
+                                            </button>
                                         </div>
                                     )}
                                     {sub.scholarship_certification_path && (
                                         <div>
                                             <div className="text-gray-600">Scholarship Certification</div>
-                                            <a
-                                                href={getApiUrl(`/api/documents/${sub.scholarship_certification_path}`)}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 underline hover:text-blue-800"
+                                            <button
+                                                onClick={() => openServerDocument(sub.scholarship_certification_path, 'Scholarship_Certification')}
+                                                disabled={loadingDocument === 'Scholarship_Certification'}
+                                                className="text-blue-600 underline hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                View Document
-                                            </a>
+                                                {loadingDocument === 'Scholarship_Certification' ? 'Loading...' : 'View Document'}
+                                            </button>
                                         </div>
                                     )}
                                     {sub.sao_photo_path && (
                                         <div>
                                             <div className="text-gray-600">SOA</div>
-                                            <a
-                                                href={getApiUrl(`/api/documents/${sub.sao_photo_path}`)}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 underline hover:text-blue-800"
+                                            <button
+                                                onClick={() => openServerDocument(sub.sao_photo_path, 'SOA')}
+                                                disabled={loadingDocument === 'SOA'}
+                                                className="text-blue-600 underline hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                View Document
-                                            </a>
+                                                {loadingDocument === 'SOA' ? 'Loading...' : 'View Document'}
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -1061,7 +1396,7 @@ export default function EnrollmentVerificationCard({ user }) {
         )}
 
         {/* File Preview Modal */}
-        {previewFile && previewUrl && (
+        {previewFile && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" key={`modal-${previewKey}`}>
                 <div
                     className="absolute inset-0 bg-gray-900/60"
@@ -1073,7 +1408,7 @@ export default function EnrollmentVerificationCard({ user }) {
                             {previewFile.name || 'File Preview'}
                         </h3>
                         <div className="flex items-center gap-3">
-                            {(isImageFile(previewFile) || isPdfFile(previewFile)) && (
+                            {(isImageFile(previewFile) || isPdfFile(previewFile) || (previewFile?.type && (previewFile.type.startsWith('image/') || previewFile.type === 'application/pdf'))) && (
                                 <button
                                     type="button"
                                     onClick={downloadPreviewFile}
@@ -1097,52 +1432,219 @@ export default function EnrollmentVerificationCard({ user }) {
                         </div>
                     </div>
                     <div className="flex-1 overflow-auto p-6 bg-gray-100 min-h-0" key={`content-${previewKey}`}>
-                        {previewUrl && previewFile && isImageFile(previewFile) ? (
-                            <div className="flex items-center justify-center h-full w-full">
-                                <img
-                                    key={`img-${previewKey}-${previewUrl}`}
-                                    src={previewUrl}
-                                    alt={previewFile.name || 'Preview'}
-                                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg bg-white"
-                                    style={{ maxHeight: 'calc(90vh - 180px)', maxWidth: '100%' }}
-                                    onError={(e) => {
-                                        console.error('Failed to load image preview', e)
-                                        setToast({ 
-                                            open: true, 
-                                            type: 'error', 
-                                            title: 'Preview failed', 
-                                            message: 'Could not load the image preview. The file may be corrupted.' 
-                                        })
-                                    }}
-                                />
+                        {!previewUrl && previewFile ? (
+                            <div className="flex items-center justify-center min-h-full">
+                                <div className="text-center">
+                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                                    <p className="mt-4 text-gray-600">Loading document...</p>
+                                </div>
                             </div>
-                        ) : previewUrl && previewFile && isPdfFile(previewFile) ? (
-                            <div className="flex items-center justify-center h-full w-full">
-                                <iframe
-                                    key={`iframe-${previewKey}-${previewUrl}`}
-                                    src={previewUrl}
-                                    className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
-                                    style={{ minHeight: 'calc(90vh - 180px)', width: '100%' }}
-                                    title={`PDF Preview - ${previewFile.name || 'PDF'}`}
-                                    onError={(e) => {
-                                        console.error('Failed to load PDF preview', e)
-                                        setToast({ 
-                                            open: true, 
-                                            type: 'error', 
-                                            title: 'Preview failed', 
-                                            message: 'Could not load the PDF preview. The file may be corrupted.' 
-                                        })
-                                    }}
-                                />
-                            </div>
+                        ) : previewUrl && previewFile ? (
+                            (() => {
+                                // Determine if it's an image or PDF based on type
+                                const fileType = previewFile.type || ''
+                                const fileName = previewFile.name || ''
+                                
+                                const isImage = fileType.startsWith('image/')
+                                const isPdf = fileType === 'application/pdf'
+                                
+                                // Fallback to checking file name if type is not set
+                                // Production-safe: Only check for supported formats (JPG, JPEG, PNG, PDF)
+                                const isImageByName = /\.(jpg|jpeg|png)$/i.test(fileName)
+                                const isPdfByName = /\.pdf$/i.test(fileName)
+                                
+                                // Determine final type
+                                const shouldShowImage = isImage || isImageByName
+                                const shouldShowPdf = isPdf || isPdfByName
+                                
+                                if (shouldShowImage) {
+                                    // Validate previewUrl exists before rendering
+                                    if (!previewUrl) {
+                                        return (
+                                            <div className="flex items-center justify-center min-h-full">
+                                                <div className="text-center">
+                                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                                                    <p className="mt-4 text-gray-600">Loading image...</p>
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+                                    
+                                    return (
+                                        <div className="flex items-center justify-center h-full w-full bg-gray-50 p-4 overflow-auto">
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <img
+                                                    key={`img-${previewKey}-${previewUrl}`}
+                                                    src={previewUrl}
+                                                    alt={previewFile.name || 'Document Preview'}
+                                                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg bg-white"
+                                                    style={{ 
+                                                        maxHeight: 'calc(90vh - 200px)', 
+                                                        width: 'auto',
+                                                        height: 'auto',
+                                                        display: 'block',
+                                                        imageRendering: 'auto'
+                                                    }}
+                                                    loading="eager"
+                                                    decoding="async"
+                                                    onError={async (e) => {
+                                                        // Log error in development only
+                                                        if (process.env.NODE_ENV === 'development') {
+                                                            console.error('Failed to load image preview', {
+                                                                fileName: previewFile.name,
+                                                                fileType: previewFile.type,
+                                                                blobUrl: previewUrl?.substring(0, 50) + '...',
+                                                                error: e,
+                                                                target: e.target,
+                                                                imgSrc: e.target?.src,
+                                                                blobUrlValid: previewUrl?.startsWith('blob:'),
+                                                                naturalWidth: e.target.naturalWidth,
+                                                                naturalHeight: e.target.naturalHeight
+                                                            })
+                                                        }
+                                                        
+                                                        // Check if this is a cached blob URL that failed
+                                                        // If so, clear the cache and re-fetch the document
+                                                        const cachedPath = Object.keys(documentBlobCache.current).find(
+                                                            key => documentBlobCache.current[key]?.blobUrl === previewUrl
+                                                        )
+                                                        
+                                                        if (cachedPath) {
+                                                            // Cached blob URL is invalid - clear it and re-fetch
+                                                            const cached = documentBlobCache.current[cachedPath]
+                                                            if (cached?.blobUrl) {
+                                                                try {
+                                                                    window.URL.revokeObjectURL(cached.blobUrl)
+                                                                } catch (revokeErr) {
+                                                                    // Ignore errors
+                                                                }
+                                                            }
+                                                            delete documentBlobCache.current[cachedPath]
+                                                            
+                                                            // Determine document type from path
+                                                            let docType = 'Document'
+                                                            if (cachedPath.includes('enrollment_certification')) {
+                                                                docType = 'Enrollment_Certification'
+                                                            } else if (cachedPath.includes('scholarship')) {
+                                                                docType = 'Scholarship_Certification'
+                                                            } else if (cachedPath.includes('sao')) {
+                                                                docType = 'SOA'
+                                                            }
+                                                            
+                                                            // Re-fetch the document with a fresh blob
+                                                            try {
+                                                                await openServerDocument(cachedPath, docType)
+                                                                return // Successfully re-fetched, exit error handler
+                                                            } catch (refetchErr) {
+                                                                // Re-fetch failed, show error
+                                                                setToast({ 
+                                                                    open: true, 
+                                                                    type: 'error', 
+                                                                    title: 'Failed to load image', 
+                                                                    message: 'The image could not be displayed. Please try again.' 
+                                                                })
+                                                            }
+                                                        } else {
+                                                            // Not a cached URL or re-fetch not possible, show error
+                                                            setToast({ 
+                                                                open: true, 
+                                                                type: 'error', 
+                                                                title: 'Failed to load image', 
+                                                                message: 'The image could not be displayed. The file may be corrupted or in an unsupported format.' 
+                                                            })
+                                                        }
+                                                    }}
+                                                    onLoad={(e) => {
+                                                        // Success - image loaded
+                                                        if (process.env.NODE_ENV === 'development') {
+                                                            console.log('Image loaded successfully', {
+                                                                fileName: previewFile.name,
+                                                                fileType: previewFile.type,
+                                                                naturalWidth: e.target.naturalWidth,
+                                                                naturalHeight: e.target.naturalHeight,
+                                                                blobUrl: previewUrl?.substring(0, 50) + '...',
+                                                                imgSrc: e.target.src?.substring(0, 50) + '...'
+                                                            })
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )
+                                } else if (shouldShowPdf) {
+                                    // Validate previewUrl exists before rendering PDF
+                                    if (!previewUrl) {
+                                        return (
+                                            <div className="flex items-center justify-center min-h-full">
+                                                <div className="text-center">
+                                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                                                    <p className="mt-4 text-gray-600">Loading PDF...</p>
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+                                    
+                                    return (
+                                        <div className="flex items-center justify-center h-full w-full bg-gray-50">
+                                            <iframe
+                                                key={`iframe-${previewKey}-${previewUrl}`}
+                                                src={`${previewUrl}#toolbar=0`}
+                                                className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
+                                                style={{ 
+                                                    minHeight: 'calc(90vh - 180px)', 
+                                                    width: '100%',
+                                                    height: '100%'
+                                                }}
+                                                title={`PDF Preview - ${previewFile.name || 'PDF'}`}
+                                                allow="fullscreen"
+                                                onError={(e) => {
+                                                    if (process.env.NODE_ENV === 'development') {
+                                                        console.error('Failed to load PDF preview', {
+                                                            error: e,
+                                                            src: previewUrl,
+                                                            fileName: previewFile.name
+                                                        })
+                                                    }
+                                                    // If PDF fails to load, try to clear cache and reload
+                                                    // Find the path by looking up the blobUrl in cache
+                                                    const cachedPath = Object.keys(documentBlobCache.current).find(
+                                                        key => documentBlobCache.current[key]?.blobUrl === previewUrl
+                                                    )
+                                                    if (cachedPath) {
+                                                        delete documentBlobCache.current[cachedPath]
+                                                    }
+                                                    setToast({ 
+                                                        open: true, 
+                                                        type: 'error', 
+                                                        title: 'Preview failed', 
+                                                        message: 'Could not load the PDF preview. The file may be corrupted. Please try downloading it instead.' 
+                                                    })
+                                                }}
+                                            />
+                                        </div>
+                                    )
+                                } else {
+                                    return (
+                                        <div className="flex items-center justify-center min-h-full">
+                                            <div className="text-center">
+                                                <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                                <p className="mt-4 text-gray-600">Preview not available for this file type</p>
+                                                <p className="mt-2 text-sm text-gray-500">{previewFile?.name || 'Unknown file'}</p>
+                                                <p className="mt-1 text-xs text-gray-400">Type: {previewFile?.type || 'unknown'}</p>
+                                            </div>
+                                        </div>
+                                    )
+                                }
+                            })()
                         ) : (
                             <div className="flex items-center justify-center min-h-full">
                                 <div className="text-center">
                                     <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
-                                    <p className="mt-4 text-gray-600">Preview not available for this file type</p>
-                                    <p className="mt-2 text-sm text-gray-500">{previewFile?.name || 'Unknown file'}</p>
+                                    <p className="mt-4 text-gray-600">No file selected</p>
                                 </div>
                             </div>
                         )}
